@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.apk
+*.ap_
+*.dex
+*.class
+gradle-wrapper.jar
+
+# Firebase config is per-developer/per-project — see README's
+# "Wiring up Firebase Auth" section for how to generate your own.
+app/google-services.json
