@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -209,7 +211,9 @@ private fun MessageBody(message: DemoChatMessage) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .padding(bottom = 8.dp)
-                    .size(180.dp)
+                    .width(210.dp)
+                    // Photos keep their shape (portrait/landscape); sketches are square.
+                    .aspectRatio((it.width.toFloat() / it.height).coerceIn(0.6f, 1.6f))
                     .clip(RoundedCornerShape(12.dp))
             )
         }

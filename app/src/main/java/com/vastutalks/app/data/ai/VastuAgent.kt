@@ -60,6 +60,38 @@ class VastuAgent(
         respond(note, image = sketch)
 
     /**
+     * Vastu read of a camera photo of the caller's space. Sent at higher
+     * resolution than sketches so doors, windows, mirrors and furniture
+     * are actually visible to the model. With [facing], the model is told
+     * which direction each part of the frame is in, so it can judge
+     * placements (stove in the South-East, mirror on the North wall…)
+     * instead of guessing.
+     */
+    suspend fun reviewPhoto(photo: Bitmap, question: String?, facing: PhotoFacing?): AgentTurn {
+        val note = buildString {
+            append("(The caller took this photo of their home with their camera")
+            if (!question.isNullOrBlank()) append(" and asks: \"$question\"")
+            append(". ")
+            if (facing != null) {
+                append(facing.describeForAgent())
+                append(" First work out what space this is and pick out the important things in it — doors, windows, ")
+                append("bed, stove, sink, mirror, desk, safe, puja shelf, toilet, heavy furniture, plants, colours, clutter, ")
+                append("light — and which direction each one is in using those directions. Then judge them by Vastu for ")
+                append("those directions, mention what is already good, and give the two or three most useful corrections. ")
+                append("Name the directions when you speak. You may use up to five sentences here. If moving something ")
+                append("would help, draw a simple North-up plan of the room with what you saw placed in its real direction ")
+                append("and an arrow showing where it should go.)")
+            } else {
+                append("Say what space it is and what you notice — doors, windows, furniture, mirrors, colours, ")
+                append("clutter, light — then give the two or three most useful Vastu suggestions for it. You may use ")
+                append("up to five sentences here. The camera direction is unknown, so ask which way it was facing. If ")
+                append("moving something would help, draw a simple plan of the space showing where it should go.)")
+            }
+        }
+        return respond(note, image = photo, detail = PhotoDetail.HIGH)
+    }
+
+    /**
      * Speech-to-text for one caller utterance (a 16 kHz WAV from
      * DemoListener). Returns null if nothing intelligible was said or
      * the request failed.
@@ -88,14 +120,27 @@ class VastuAgent(
         }
     }
 
-    private suspend fun respond(userText: String, image: Bitmap? = null, record: Boolean = true): AgentTurn {
+    private suspend fun respond(
+        userText: String,
+        image: Bitmap? = null,
+        record: Boolean = true,
+        detail: PhotoDetail = PhotoDetail.LOW
+    ): AgentTurn {
         if (!isConfigured) return fallback(userText, image)
 
-        val userMessage = JSONObject().put("role", "user").put("content", userContent(userText, image))
+        val userMessage = JSONObject().put("role", "user").put("content", userContent(userText, image, detail))
         return try {
             val raw = withContext(Dispatchers.IO) { post(buildRequest(userMessage)) }
             val turn = parseTurn(raw)
-            if (record) history.add(userMessage)
+            if (record) {
+                // A high-detail photo costs ~25k tokens; keep a low-detail copy in
+                // the history so follow-up questions stay fast and cheap.
+                history.add(
+                    if (image != null && detail != PhotoDetail.LOW) {
+                        JSONObject().put("role", "user").put("content", userContent(userText, image, PhotoDetail.LOW))
+                    } else userMessage
+                )
+            }
             history.add(JSONObject().put("role", "assistant").put("content", raw))
             while (history.size > MAX_HISTORY) history.removeAt(0)
             turn
@@ -110,14 +155,16 @@ class VastuAgent(
         else DemoAgentReplies.replyFor(userText)
     )
 
-    private fun userContent(text: String, image: Bitmap?): Any {
+    private fun userContent(text: String, image: Bitmap?, detail: PhotoDetail): Any {
         if (image == null) return text
         return JSONArray()
             .put(JSONObject().put("type", "text").put("text", text))
             .put(
                 JSONObject().put("type", "image_url").put(
                     "image_url",
-                    JSONObject().put("url", "data:image/jpeg;base64,${encode(image)}").put("detail", "low")
+                    JSONObject()
+                        .put("url", "data:image/jpeg;base64,${encode(image, detail.maxSide)}")
+                        .put("detail", detail.apiValue)
                 )
             )
     }
@@ -159,14 +206,19 @@ class VastuAgent(
         }
     }
 
-    private fun encode(bitmap: Bitmap): String {
-        val scale = 512f / maxOf(bitmap.width, bitmap.height)
+    private fun encode(bitmap: Bitmap, maxSide: Int): String {
+        val scale = maxSide.toFloat() / maxOf(bitmap.width, bitmap.height)
         val scaled = if (scale < 1f) {
             Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
         } else bitmap
         val out = ByteArrayOutputStream()
         scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
         return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    private enum class PhotoDetail(val apiValue: String, val maxSide: Int) {
+        LOW("low", 512),
+        HIGH("high", 1024)
     }
 
     companion object {

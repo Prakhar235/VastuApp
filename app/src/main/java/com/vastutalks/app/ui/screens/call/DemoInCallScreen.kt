@@ -44,6 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -77,9 +78,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import coil.compose.AsyncImage
 import com.vastutalks.app.data.ai.AgentTurn
 import com.vastutalks.app.data.ai.DemoCallRecorder
+import com.vastutalks.app.data.ai.PhotoFacing
 import com.vastutalks.app.data.ai.VastuAgent
 import com.vastutalks.app.data.model.DemoExpert
 import com.vastutalks.app.ui.components.CallTones
@@ -87,6 +92,9 @@ import com.vastutalks.app.ui.components.CallWhiteboard
 import com.vastutalks.app.ui.components.ChatSender
 import com.vastutalks.app.ui.components.DemoChatMessage
 import com.vastutalks.app.ui.components.DemoChatPage
+import com.vastutalks.app.ui.components.CapturedPhoto
+import com.vastutalks.app.ui.components.PhotoReviewSheet
+import com.vastutalks.app.ui.components.rememberPhotoCapture
 import com.vastutalks.app.ui.components.WhiteboardPalette
 import com.vastutalks.app.ui.components.WhiteboardState
 import com.vastutalks.app.ui.components.rememberDemoListener
@@ -123,8 +131,10 @@ private enum class CallStatus(val label: String, val color: Color) {
  * the full conversation plus a box to type.
  *
  * She greets the caller, then waits as long as it takes for them to
- * speak (DemoListener) and answers out loud. Everything said and every
- * board snapshot is saved as the call goes (DemoCallRecorder).
+ * speak (DemoListener) and answers out loud. The camera button lets
+ * the caller photograph a room for her to give Vastu suggestions on.
+ * Everything said, every board snapshot and every photo is saved as
+ * the call goes (DemoCallRecorder).
  */
 @Composable
 fun DemoInCallScreen(onEndCall: () -> Unit) {
@@ -144,8 +154,10 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
     var pendingTurns by remember { mutableIntStateOf(0) }
     var isTranscribing by remember { mutableStateOf(false) }
     var hasGreeted by remember { mutableStateOf(false) }
+    var photoToReview by remember { mutableStateOf<CapturedPhoto?>(null) }
     val chatMessages = remember { mutableStateListOf<DemoChatMessage>() }
     val isAgentTyping = pendingTurns > 0
+    val isResumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
 
     var hasMicPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
@@ -212,6 +224,31 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
         askAgent { agent.reviewSketch(bitmap) }
     }
 
+    val takePhoto = rememberPhotoCapture(
+        onError = { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() },
+        onCaptured = { photoToReview = it }
+    )
+
+    fun sendPhoto(photo: android.graphics.Bitmap, question: String, facing: PhotoFacing?) {
+        photoToReview = null
+        val caption = question.ifBlank { "What does Vastu say about this space?" } +
+            (facing?.let { " · camera facing ${it.direction.label}" } ?: "")
+        recorder.savePhoto(photo, "Shared a photo: $caption")
+        val thumbScale = 480f / maxOf(photo.width, photo.height)
+        addMessage(
+            DemoChatMessage(
+                id = chatMessages.size,
+                text = caption,
+                sender = ChatSender.USER,
+                image = android.graphics.Bitmap.createScaledBitmap(
+                    photo, (photo.width * thumbScale).toInt(), (photo.height * thumbScale).toInt(), true
+                ).asImageBitmap()
+            )
+        )
+        page = CallPage.CHAT // show the photo with her answer; a drawing would bring the board back
+        askAgent { agent.reviewPhoto(photo, question, facing) }
+    }
+
     fun clearBoard() {
         if (board.hasUnsavedChanges) saveBoard("You", "Board before clearing")
         board.clear()
@@ -228,7 +265,8 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
     // turn, and stays open until they actually say something. Closed while
     // Ananya thinks or speaks (so she doesn't hear herself) and when muted.
     val callerTurn = hasGreeted && hasMicPermission && agent.isConfigured && !isMuted &&
-        !voice.isSpeaking && !isAgentTyping && !isTranscribing
+        !voice.isSpeaking && !isAgentTyping && !isTranscribing &&
+        isResumed && photoToReview == null // not while the camera app or photo preview is up
     var micOpen by remember { mutableStateOf(false) }
     LaunchedEffect(callerTurn) {
         if (callerTurn) delay(500) // let the speaker's last syllable die away first
@@ -346,7 +384,21 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
                     if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     else isMuted = !isMuted
                 },
+                onCamera = takePhoto,
                 onEndCall = onEndCall
+            )
+        }
+
+        photoToReview?.let { photo ->
+            PhotoReviewSheet(
+                photo = photo,
+                agentName = DemoExpert.NAME.substringBefore(' '),
+                onRetake = {
+                    photoToReview = null
+                    takePhoto()
+                },
+                onDismiss = { photoToReview = null },
+                onSend = { question, facing -> sendPhoto(photo.bitmap, question, facing) }
             )
         }
     }
@@ -617,6 +669,7 @@ private fun CallControls(
     isHearing: Boolean,
     isListening: Boolean,
     onToggleMic: () -> Unit,
+    onCamera: () -> Unit,
     onEndCall: () -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "mic")
@@ -627,7 +680,7 @@ private fun CallControls(
     )
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(36.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
@@ -666,6 +719,17 @@ private fun CallControls(
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Filled.CallEnd, contentDescription = "End call", tint = Color.White, modifier = Modifier.size(26.dp))
+        }
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(CallTones.SurfaceRaised)
+                .border(1.dp, CallTones.Hairline, CircleShape)
+                .clickable { onCamera() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.PhotoCamera, contentDescription = "Take a photo for Vastu advice", tint = CallTones.TextPrimary, modifier = Modifier.size(22.dp))
         }
     }
 }

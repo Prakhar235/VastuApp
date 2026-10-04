@@ -16,7 +16,7 @@ import java.util.concurrent.Executors
 /**
  * Saves a demo call as it happens: every line said (by the caller or
  * Ananya) is appended to transcript.txt straight away, and every board
- * snapshot is written as a PNG — so nothing is lost if the app is
+ * snapshot (PNG) and camera photo (JPEG) is written — so nothing is lost if the app is
  * killed mid-call.
  *
  * Files go to the app's folder
@@ -31,6 +31,7 @@ class DemoCallRecorder(context: Context) {
     private val callName = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date(startedAt))
     private val io = Executors.newSingleThreadExecutor()
     private var drawingCount = 0
+    private var photoCount = 0
 
     val folder: File = File(appContext.getExternalFilesDir(null) ?: appContext.filesDir, "DemoCalls/$callName")
     private val transcript = File(folder, "transcript.txt")
@@ -61,6 +62,21 @@ class DemoCallRecorder(context: Context) {
             }.onFailure { Log.w(TAG, "Drawing save failed", it) }
         }
         return name
+    }
+
+    /** Saves a camera photo the caller shared, and notes it in the transcript. */
+    fun savePhoto(bitmap: Bitmap, caption: String) {
+        photoCount++
+        val name = "photo_%02d.jpg".format(photoCount)
+        logLine("You", "[$caption — saved as $name]")
+        io.execute {
+            runCatching {
+                File(folder, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                publish(name, "image/jpeg", "${Environment.DIRECTORY_PICTURES}/VastuTalks/$callName") { out ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                }
+            }.onFailure { Log.w(TAG, "Photo save failed", it) }
+        }
     }
 
     /** Call when the call ends: closes the transcript and copies it to Documents/VastuTalks. */
