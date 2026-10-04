@@ -45,9 +45,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -83,22 +86,25 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import coil.compose.AsyncImage
 import com.vastutalks.app.data.ai.AgentTurn
-import com.vastutalks.app.data.ai.DemoCallRecorder
+import com.vastutalks.app.data.ai.AgentCallRecorder
 import com.vastutalks.app.data.ai.PhotoFacing
 import com.vastutalks.app.data.ai.VastuAgent
-import com.vastutalks.app.data.model.DemoExpert
+import com.vastutalks.app.data.model.AnanyaAgent
 import com.vastutalks.app.ui.components.CallTones
 import com.vastutalks.app.ui.components.CallWhiteboard
 import com.vastutalks.app.ui.components.ChatSender
-import com.vastutalks.app.ui.components.DemoChatMessage
-import com.vastutalks.app.ui.components.DemoChatPage
+import com.vastutalks.app.ui.components.AgentChatMessage
+import com.vastutalks.app.ui.components.AgentChatPage
 import com.vastutalks.app.ui.components.CapturedPhoto
+import com.vastutalks.app.ui.components.CapturedVideo
+import com.vastutalks.app.ui.components.VideoReviewSheet
+import com.vastutalks.app.ui.components.rememberVideoCapture
 import com.vastutalks.app.ui.components.PhotoReviewSheet
 import com.vastutalks.app.ui.components.rememberPhotoCapture
 import com.vastutalks.app.ui.components.WhiteboardPalette
 import com.vastutalks.app.ui.components.WhiteboardState
-import com.vastutalks.app.ui.components.rememberDemoListener
-import com.vastutalks.app.ui.components.rememberDemoVoice
+import com.vastutalks.app.ui.components.rememberCallerListener
+import com.vastutalks.app.ui.components.rememberAgentVoice
 import com.vastutalks.app.ui.components.rememberWhiteboardState
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.OnlineGreen
@@ -125,24 +131,24 @@ private enum class CallStatus(val label: String, val color: Color) {
 }
 
 /**
- * The demo call, once Ananya (VastuAgent, an OpenAI model) picks up.
+ * The call with the AI agent Ananya (VastuAgent, an OpenAI model), once she picks up.
  * Two pages, switched from the header: the Board (default) — a shared
  * whiteboard both of them draw on, with live captions — and the Chat,
  * the full conversation plus a box to type.
  *
  * She greets the caller, then waits as long as it takes for them to
- * speak (DemoListener) and answers out loud. The camera button lets
- * the caller photograph a room for her to give Vastu suggestions on.
- * Everything said, every board snapshot and every photo is saved as
- * the call goes (DemoCallRecorder).
+ * speak (CallerListener) and answers out loud. The camera button lets
+ * the caller photograph or film a room for her to give Vastu suggestions
+ * on. Everything said, every board snapshot, photo and video is saved as
+ * the call goes (AgentCallRecorder).
  */
 @Composable
-fun DemoInCallScreen(onEndCall: () -> Unit) {
+fun AgentInCallScreen(onEndCall: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val agent = remember { VastuAgent() }
     val agentTurnLock = remember { Mutex() }
-    val recorder = remember { DemoCallRecorder(context) }
+    val recorder = remember { AgentCallRecorder(context) }
     val board = rememberWhiteboardState()
 
     var page by remember { mutableStateOf(CallPage.BOARD) }
@@ -155,7 +161,8 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
     var isTranscribing by remember { mutableStateOf(false) }
     var hasGreeted by remember { mutableStateOf(false) }
     var photoToReview by remember { mutableStateOf<CapturedPhoto?>(null) }
-    val chatMessages = remember { mutableStateListOf<DemoChatMessage>() }
+    var videoToReview by remember { mutableStateOf<CapturedVideo?>(null) }
+    val chatMessages = remember { mutableStateListOf<AgentChatMessage>() }
     val isAgentTyping = pendingTurns > 0
     val isResumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
 
@@ -166,7 +173,7 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
         hasMicPermission = granted
     }
 
-    val voice by rememberUpdatedState(rememberDemoVoice())
+    val voice by rememberUpdatedState(rememberAgentVoice())
 
     /** Saves whatever is on the board right now. */
     fun saveBoard(who: String, caption: String): android.graphics.Bitmap? {
@@ -177,19 +184,19 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
         return bitmap
     }
 
-    fun addMessage(message: DemoChatMessage) {
+    fun addMessage(message: AgentChatMessage) {
         chatMessages.add(message)
         if (page != CallPage.CHAT && message.sender == ChatSender.AGENT) unread++
     }
 
     fun postAgentTurn(turn: AgentTurn) {
         voice.speak(turn.say)
-        addMessage(DemoChatMessage(id = chatMessages.size, text = turn.say, sender = ChatSender.AGENT))
-        recorder.logLine(DemoExpert.NAME, turn.say)
+        addMessage(AgentChatMessage(id = chatMessages.size, text = turn.say, sender = ChatSender.AGENT))
+        recorder.logLine(AnanyaAgent.NAME, turn.say)
         turn.board?.let { drawing ->
             board.showAgentDrawing(drawing)
             page = CallPage.BOARD // she's explaining on the board — bring it into view
-            saveBoard(DemoExpert.NAME, "Drew on the board: ${drawing.title.ifBlank { "sketch" }}")
+            saveBoard(AnanyaAgent.NAME, "Drew on the board: ${drawing.title.ifBlank { "sketch" }}")
         }
     }
 
@@ -206,15 +213,15 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
     }
 
     fun onUserSaid(text: String) {
-        addMessage(DemoChatMessage(id = chatMessages.size, text = text, sender = ChatSender.USER))
+        addMessage(AgentChatMessage(id = chatMessages.size, text = text, sender = ChatSender.USER))
         recorder.logLine("You", text)
         askAgent { agent.reply(text) }
     }
 
     fun sendBoardToAgent() {
-        val bitmap = saveBoard("You", "Sent the board to ${DemoExpert.NAME}") ?: board.render()
+        val bitmap = saveBoard("You", "Sent the board to ${AnanyaAgent.NAME}") ?: board.render()
         addMessage(
-            DemoChatMessage(
+            AgentChatMessage(
                 id = chatMessages.size,
                 text = "",
                 sender = ChatSender.USER,
@@ -229,24 +236,44 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
         onCaptured = { photoToReview = it }
     )
 
+    val recordVideo = rememberVideoCapture(
+        onError = { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() },
+        onCaptured = { videoToReview = it }
+    )
+
+    /** Posts a shared photo or video in the chat as a thumbnail with its caption. */
+    fun postMedia(preview: android.graphics.Bitmap, caption: String) {
+        val thumbScale = 480f / maxOf(preview.width, preview.height)
+        addMessage(
+            AgentChatMessage(
+                id = chatMessages.size,
+                text = caption,
+                sender = ChatSender.USER,
+                image = android.graphics.Bitmap.createScaledBitmap(
+                    preview, (preview.width * thumbScale).toInt(), (preview.height * thumbScale).toInt(), true
+                ).asImageBitmap()
+            )
+        )
+        page = CallPage.CHAT // show it with her answer; a drawing would bring the board back
+    }
+
     fun sendPhoto(photo: android.graphics.Bitmap, question: String, facing: PhotoFacing?) {
         photoToReview = null
         val caption = question.ifBlank { "What does Vastu say about this space?" } +
             (facing?.let { " · camera facing ${it.direction.label}" } ?: "")
         recorder.savePhoto(photo, "Shared a photo: $caption")
-        val thumbScale = 480f / maxOf(photo.width, photo.height)
-        addMessage(
-            DemoChatMessage(
-                id = chatMessages.size,
-                text = caption,
-                sender = ChatSender.USER,
-                image = android.graphics.Bitmap.createScaledBitmap(
-                    photo, (photo.width * thumbScale).toInt(), (photo.height * thumbScale).toInt(), true
-                ).asImageBitmap()
-            )
-        )
-        page = CallPage.CHAT // show the photo with her answer; a drawing would bring the board back
+        postMedia(photo, caption)
         askAgent { agent.reviewPhoto(photo, question, facing) }
+    }
+
+    fun sendVideo(video: CapturedVideo, question: String, facing: PhotoFacing?) {
+        videoToReview = null
+        val caption = "Video (${maxOf(1, video.durationMs / 1000)}s): " +
+            question.ifBlank { "What does Vastu say about this space?" } +
+            (facing?.let { " · started facing ${it.direction.label}" } ?: "")
+        recorder.saveVideo(video.file, "Shared a video: $caption")
+        postMedia(video.frames.first(), caption)
+        askAgent { agent.reviewVideo(video.frames, video.durationMs, question, facing) }
     }
 
     fun clearBoard() {
@@ -266,13 +293,13 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
     // Ananya thinks or speaks (so she doesn't hear herself) and when muted.
     val callerTurn = hasGreeted && hasMicPermission && agent.isConfigured && !isMuted &&
         !voice.isSpeaking && !isAgentTyping && !isTranscribing &&
-        isResumed && photoToReview == null // not while the camera app or photo preview is up
+        isResumed && photoToReview == null && videoToReview == null // not while the camera app or a preview is up
     var micOpen by remember { mutableStateOf(false) }
     LaunchedEffect(callerTurn) {
         if (callerTurn) delay(500) // let the speaker's last syllable die away first
         micOpen = callerTurn
     }
-    val listener = rememberDemoListener(active = micOpen) { wav ->
+    val listener = rememberCallerListener(active = micOpen) { wav ->
         isTranscribing = true
         scope.launch {
             val text = try { agent.transcribe(wav) } finally { isTranscribing = false }
@@ -313,7 +340,7 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
         !agent.isConfigured -> CallStatus.TEXT_ONLY
         else -> CallStatus.LISTENING
     }
-    val demoCost = (elapsedSeconds / 60.0) * (DemoExpert.PRICE_PER_SESSION / 60.0)
+    val callCost = (elapsedSeconds / 60.0) * (AnanyaAgent.PRICE_PER_SESSION / 60.0)
 
     Box(
         modifier = Modifier
@@ -332,7 +359,7 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
                 status = status,
                 isSpeaking = voice.isSpeaking,
                 timer = "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60),
-                cost = "₹%.0f".format(demoCost)
+                cost = "₹%.0f".format(callCost)
             )
 
             PageSwitch(
@@ -364,11 +391,11 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
                         onSend = { sendBoardToAgent() },
                         onClear = { clearBoard() }
                     )
-                    CallPage.CHAT -> DemoChatPage(
+                    CallPage.CHAT -> AgentChatPage(
                         messages = chatMessages,
                         isAgentTyping = isAgentTyping,
-                        agentName = DemoExpert.NAME,
-                        avatarSeed = DemoExpert.AVATAR_SEED,
+                        agentName = AnanyaAgent.NAME,
+                        avatarSeed = AnanyaAgent.AVATAR_SEED,
                         inputText = chatInput,
                         onInputChange = { chatInput = it },
                         onSend = { sendTyped() }
@@ -384,7 +411,8 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
                     if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     else isMuted = !isMuted
                 },
-                onCamera = takePhoto,
+                onTakePhoto = takePhoto,
+                onRecordVideo = recordVideo,
                 onEndCall = onEndCall
             )
         }
@@ -392,13 +420,30 @@ fun DemoInCallScreen(onEndCall: () -> Unit) {
         photoToReview?.let { photo ->
             PhotoReviewSheet(
                 photo = photo,
-                agentName = DemoExpert.NAME.substringBefore(' '),
+                agentName = AnanyaAgent.NAME.substringBefore(' '),
                 onRetake = {
                     photoToReview = null
                     takePhoto()
                 },
                 onDismiss = { photoToReview = null },
                 onSend = { question, facing -> sendPhoto(photo.bitmap, question, facing) }
+            )
+        }
+
+        videoToReview?.let { video ->
+            VideoReviewSheet(
+                video = video,
+                agentName = AnanyaAgent.NAME.substringBefore(' '),
+                onRetake = {
+                    video.file.delete()
+                    videoToReview = null
+                    recordVideo()
+                },
+                onDismiss = {
+                    video.file.delete()
+                    videoToReview = null
+                },
+                onSend = { question, facing -> sendVideo(video, question, facing) }
             )
         }
     }
@@ -415,13 +460,13 @@ private fun CallHeader(status: CallStatus, isSpeaking: Boolean, timer: String, c
             modifier = Modifier.size(46.dp).border(2.dp, ringColor, CircleShape).padding(4.dp)
         ) {
             AsyncImage(
-                model = "https://i.pravatar.cc/300?u=${DemoExpert.AVATAR_SEED}",
+                model = "https://i.pravatar.cc/300?u=${AnanyaAgent.AVATAR_SEED}",
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize().clip(CircleShape).background(CallTones.SurfaceRaised)
             )
         }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(DemoExpert.NAME, color = CallTones.TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text(AnanyaAgent.NAME, color = CallTones.TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                 StatusDot(status)
                 Text(
@@ -525,7 +570,7 @@ private fun BoardPage(
     board: WhiteboardState,
     penColor: Color,
     onPenColor: (Color) -> Unit,
-    latest: DemoChatMessage?,
+    latest: AgentChatMessage?,
     onSend: () -> Unit,
     onClear: () -> Unit
 ) {
@@ -548,7 +593,7 @@ private fun BoardPage(
             Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (line != null) {
                     Text(
-                        if (line.sender == ChatSender.AGENT) DemoExpert.NAME.substringBefore(' ').uppercase() else "YOU",
+                        if (line.sender == ChatSender.AGENT) AnanyaAgent.NAME.substringBefore(' ').uppercase() else "YOU",
                         color = if (line.sender == ChatSender.AGENT) VastuSaffron else CallTones.TextMuted,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -669,7 +714,8 @@ private fun CallControls(
     isHearing: Boolean,
     isListening: Boolean,
     onToggleMic: () -> Unit,
-    onCamera: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onRecordVideo: () -> Unit,
     onEndCall: () -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "mic")
@@ -720,16 +766,36 @@ private fun CallControls(
         ) {
             Icon(Icons.Filled.CallEnd, contentDescription = "End call", tint = Color.White, modifier = Modifier.size(26.dp))
         }
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(CallTones.SurfaceRaised)
-                .border(1.dp, CallTones.Hairline, CircleShape)
-                .clickable { onCamera() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Outlined.PhotoCamera, contentDescription = "Take a photo for Vastu advice", tint = CallTones.TextPrimary, modifier = Modifier.size(22.dp))
+        Box {
+            var menuOpen by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(CallTones.SurfaceRaised)
+                    .border(1.dp, CallTones.Hairline, CircleShape)
+                    .clickable { menuOpen = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.PhotoCamera, contentDescription = "Share a photo or video for Vastu advice", tint = CallTones.TextPrimary, modifier = Modifier.size(22.dp))
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = CallTones.SurfaceRaised,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Take a photo", color = CallTones.TextPrimary) },
+                    leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = CallTones.TextPrimary) },
+                    onClick = { menuOpen = false; onTakePhoto() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Record a video (up to 30s)", color = CallTones.TextPrimary) },
+                    leadingIcon = { Icon(Icons.Outlined.Videocam, contentDescription = null, tint = CallTones.TextPrimary) },
+                    onClick = { menuOpen = false; onRecordVideo() }
+                )
+            }
         }
     }
 }

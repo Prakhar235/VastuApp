@@ -94,7 +94,7 @@ fun HomeScreen(
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit = { _, _, _ -> },
     onAcceptIncomingCall: (channelName: String, callType: CallType, peerName: String) -> Unit = { _, _, _ -> },
     onExpertCardClick: (expertId: String, expertName: String) -> Unit = { _, _ -> },
-    onTryDemoCall: () -> Unit = {},
+    onCallAgent: () -> Unit = {},
     homeViewModel: HomeViewModel = viewModel()
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
@@ -177,7 +177,7 @@ fun HomeScreen(
                 onSearchClick = onSearchClick,
                 onCallExpert = onCallExpert,
                 onExpertCardClick = onExpertCardClick,
-                onTryDemoCall = onTryDemoCall
+                onCallAgent = onCallAgent
             )
         }
     }
@@ -322,7 +322,7 @@ private fun NormalUserHome(
     onSearchClick: () -> Unit,
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit,
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
-    onTryDemoCall: () -> Unit
+    onCallAgent: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.EXPERTS) }
 
@@ -371,7 +371,7 @@ private fun NormalUserHome(
         Box(modifier = Modifier.height(16.dp))
 
         when (selectedTab) {
-            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, expertsError, onCallExpert, onExpertCardClick, onTryDemoCall)
+            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, expertsError, onCallExpert, onExpertCardClick, onCallAgent)
             HomeTab.POSTS -> PostsFeed(liveExperts.map { it.name })
         }
     }
@@ -404,7 +404,7 @@ private fun ExpertsTabContent(
     expertsError: String?,
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit,
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
-    onTryDemoCall: () -> Unit
+    onCallAgent: () -> Unit
 ) {
     Column {
         Box(
@@ -435,15 +435,15 @@ private fun ExpertsTabContent(
 
         Box(modifier = Modifier.height(12.dp))
 
-        // Always-available, fully self-contained demo — no real
-        // expert/second device needed to see the calling UX work.
+        // Ananya, the AI Vastu agent — always available, no human
+        // expert needs to be online.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.White)
-                .clickable { onTryDemoCall() }
+                .clickable { onCallAgent() }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -457,8 +457,8 @@ private fun ExpertsTabContent(
                 Icon(Icons.Filled.Videocam, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
             }
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text("Try a Demo Call", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
-                Text("See the calling experience — no setup needed", fontSize = 11.sp, color = TextSecondary)
+                Text("Call Ananya — AI Vastu Expert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
+                Text("Talk, sketch or share photos and videos — available anytime", fontSize = 11.sp, color = TextSecondary)
             }
         }
 

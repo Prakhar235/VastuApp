@@ -3,8 +3,8 @@ package com.vastutalks.app.data.ai
 import android.graphics.Bitmap
 import android.util.Base64
 import com.vastutalks.app.BuildConfig
-import com.vastutalks.app.data.model.DemoAgentReplies
-import com.vastutalks.app.data.model.DemoExpert
+import com.vastutalks.app.data.model.AgentFallbackReplies
+import com.vastutalks.app.data.model.AnanyaAgent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -33,14 +33,14 @@ data class BoardDrawing(val title: String, val shapes: List<BoardShape>)
 data class AgentTurn(val say: String, val board: BoardDrawing? = null)
 
 /**
- * The demo call's AI agent: an OpenAI chat model playing [DemoExpert],
+ * Ananya, the AI agent: an OpenAI chat model playing [AnanyaAgent],
  * with memory of the conversation, able to see the user's sketches and
  * to answer with a whiteboard drawing when a layout is easier shown
  * than said.
  *
  * Calls the OpenAI API directly with the key from local.properties
- * (BuildConfig.OPENAI_API_KEY). Falls back to [DemoAgentReplies] if
- * there's no key or the request fails, so the demo never dead-ends.
+ * (BuildConfig.OPENAI_API_KEY). Falls back to [AgentFallbackReplies] if
+ * there's no key or the request fails, so the call never dead-ends.
  */
 class VastuAgent(
     private val apiKey: String = BuildConfig.OPENAI_API_KEY,
@@ -57,7 +57,7 @@ class VastuAgent(
     suspend fun reply(userText: String): AgentTurn = respond(userText)
 
     suspend fun reviewSketch(sketch: Bitmap, note: String = "Here's my sketch"): AgentTurn =
-        respond(note, image = sketch)
+        respond(note, images = listOf(sketch))
 
     /**
      * Vastu read of a camera photo of the caller's space. Sent at higher
@@ -88,12 +88,44 @@ class VastuAgent(
                 append("moving something would help, draw a simple plan of the space showing where it should go.)")
             }
         }
-        return respond(note, image = photo, detail = PhotoDetail.HIGH)
+        return respond(note, images = listOf(photo), detail = PhotoDetail.HIGH)
+    }
+
+    /**
+     * Vastu read of a short video of the caller's space. The model can't
+     * watch video, so it gets [frames] spread evenly across the clip, in
+     * order, at low detail (eight high-detail frames would cost ~200k
+     * tokens). [facing] is the direction the camera pointed when
+     * recording started; the model follows the pan from there.
+     */
+    suspend fun reviewVideo(frames: List<Bitmap>, durationMs: Long, question: String?, facing: PhotoFacing?): AgentTurn {
+        val seconds = (durationMs / 1000).coerceAtLeast(1)
+        val note = buildString {
+            append("(The caller recorded a ${seconds}-second video of their home")
+            if (!question.isNullOrBlank()) append(" and asks: \"$question\"")
+            append(". You can't watch it, so here are ${frames.size} frames taken evenly across it, in order. ")
+            if (facing != null) {
+                append("For the first frame: ")
+                append(facing.describeForAgent())
+                append(" The caller probably turned or walked while recording, so work out where later frames point by ")
+                append("following the pan — if things slide towards the left between frames, the camera is turning ")
+                append("right (clockwise, e.g. from North towards East). Only name a direction for something when you're ")
+                append("fairly sure. ")
+            } else {
+                append("The camera direction is unknown, so ask which way the video started facing. ")
+            }
+            append("Treat the frames as one walkthrough, not separate photos: say what space or spaces it shows, pick out ")
+            append("the important things — doors, windows, bed, stove, sink, mirror, desk, safe, puja shelf, toilet, heavy ")
+            append("furniture, plants, colours, clutter, light — and where they are, mention what is already good, and give ")
+            append("the two or three most useful Vastu corrections. You may use up to five sentences here. If moving ")
+            append("something would help, draw a simple North-up plan of the space with an arrow showing where it should go.)")
+        }
+        return respond(note, images = frames, historyImages = 3)
     }
 
     /**
      * Speech-to-text for one caller utterance (a 16 kHz WAV from
-     * DemoListener). Returns null if nothing intelligible was said or
+     * CallerListener). Returns null if nothing intelligible was said or
      * the request failed.
      */
     suspend fun transcribe(wav: ByteArray): String? {
@@ -122,22 +154,26 @@ class VastuAgent(
 
     private suspend fun respond(
         userText: String,
-        image: Bitmap? = null,
+        images: List<Bitmap> = emptyList(),
         record: Boolean = true,
-        detail: PhotoDetail = PhotoDetail.LOW
+        detail: PhotoDetail = PhotoDetail.LOW,
+        historyImages: Int = 1
     ): AgentTurn {
-        if (!isConfigured) return fallback(userText, image)
+        if (!isConfigured) return fallback(userText, images)
 
-        val userMessage = JSONObject().put("role", "user").put("content", userContent(userText, image, detail))
+        val userMessage = JSONObject().put("role", "user").put("content", userContent(userText, images, detail))
         return try {
             val raw = withContext(Dispatchers.IO) { post(buildRequest(userMessage)) }
             val turn = parseTurn(raw)
             if (record) {
-                // A high-detail photo costs ~25k tokens; keep a low-detail copy in
-                // the history so follow-up questions stay fast and cheap.
+                // A high-detail photo costs ~25k tokens and a video's frames add up;
+                // keep a few low-detail images in the history so follow-up questions
+                // stay fast and cheap.
                 history.add(
-                    if (image != null && detail != PhotoDetail.LOW) {
-                        JSONObject().put("role", "user").put("content", userContent(userText, image, PhotoDetail.LOW))
+                    if (images.isNotEmpty() && (detail != PhotoDetail.LOW || images.size > historyImages)) {
+                        val kept = if (images.size <= historyImages) images
+                        else List(historyImages) { i -> images[i * (images.size - 1) / maxOf(1, historyImages - 1)] }
+                        JSONObject().put("role", "user").put("content", userContent(userText, kept, PhotoDetail.LOW))
                     } else userMessage
                 )
             }
@@ -146,20 +182,20 @@ class VastuAgent(
             turn
         } catch (e: Exception) {
             android.util.Log.w("VastuAgent", "OpenAI request failed, using canned reply", e)
-            fallback(userText, image)
+            fallback(userText, images)
         }
     }
 
-    private fun fallback(userText: String, image: Bitmap?): AgentTurn = AgentTurn(
-        if (image != null) "Thanks for sharing that! Let me know which area of it you'd like suggestions for."
-        else DemoAgentReplies.replyFor(userText)
+    private fun fallback(userText: String, images: List<Bitmap>): AgentTurn = AgentTurn(
+        if (images.isNotEmpty()) "Thanks for sharing that! Let me know which area of it you'd like suggestions for."
+        else AgentFallbackReplies.replyFor(userText)
     )
 
-    private fun userContent(text: String, image: Bitmap?, detail: PhotoDetail): Any {
-        if (image == null) return text
-        return JSONArray()
-            .put(JSONObject().put("type", "text").put("text", text))
-            .put(
+    private fun userContent(text: String, images: List<Bitmap>, detail: PhotoDetail): Any {
+        if (images.isEmpty()) return text
+        val content = JSONArray().put(JSONObject().put("type", "text").put("text", text))
+        images.forEach { image ->
+            content.put(
                 JSONObject().put("type", "image_url").put(
                     "image_url",
                     JSONObject()
@@ -167,6 +203,8 @@ class VastuAgent(
                         .put("detail", detail.apiValue)
                 )
             )
+        }
+        return content
     }
 
     private fun buildRequest(userMessage: JSONObject): JSONObject {
@@ -230,7 +268,7 @@ class VastuAgent(
         private const val MAX_HISTORY = 24
 
         private val SYSTEM_PROMPT = """
-            You are ${DemoExpert.NAME}, a warm, practical ${DemoExpert.SPECIALTY} consultant on a live voice call
+            You are ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
             inside the VastuTalks app. Everything you "say" is read aloud by text-to-speech, so speak naturally:
             1-3 short sentences, no lists, no markdown, no emojis. Stay on Vastu Shastra, home layout and related
             topics; gently steer back if asked about something unrelated. After answering, stop and let the

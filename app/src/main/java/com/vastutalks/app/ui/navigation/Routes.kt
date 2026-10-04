@@ -13,10 +13,11 @@ object Routes {
     const val LIVE_IN_CALL = "live_in_call/{channelName}/{peerName}/{callType}"
     const val REAL_EXPERT_PROFILE = "real_expert_profile/{expertUid}/{expertName}"
 
-    // Fully self-contained demo call — no Firestore signaling, no Agora
-    // token, no second device. See DemoExpert.kt / DemoCallingScreen.kt.
-    const val DEMO_CALLING = "demo_calling"
-    const val DEMO_IN_CALL = "demo_in_call"
+    // Call with the AI agent Ananya — runs on the device plus the OpenAI
+    // API; no Firestore signaling or Agora token. See AnanyaAgent.kt /
+    // AgentCallingScreen.kt.
+    const val AGENT_CALLING = "agent_calling"
+    const val AGENT_IN_CALL = "agent_in_call"
 
     fun liveCalling(calleeUid: String, calleeName: String, callType: String) =
         "live_calling/${java.net.URLEncoder.encode(calleeUid, "UTF-8")}/${java.net.URLEncoder.encode(calleeName, "UTF-8")}/$callType"

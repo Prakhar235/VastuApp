@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Package visibility (Android 11+) so the demo AI agent can find
+    <!-- Package visibility (Android 11+) so the AI agent Ananya can find
          the device's speech-recognition and text-to-speech services. -->
     <queries>
         <intent>
@@ -65,7 +65,7 @@
             android:turnScreenOn="true"
             android:screenOrientation="portrait" />
 
-        <!-- Lets the camera app save full-size photos for the demo call's AI agent. -->
+        <!-- Lets the camera app save full-size photos for the AI agent Ananya. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.photos"

@@ -29,7 +29,7 @@ private const val MIN_SPEECH_FRAMES = 12 // ignore blips shorter than ~360 ms
 private const val MAX_SPEECH_FRAMES = 1000 // cap one utterance at ~30 s
 
 /**
- * The demo agent's ears. While [rememberDemoListener]'s `active` is
+ * The AI agent's ears. While [rememberCallerListener]'s `active` is
  * true it keeps the mic open and waits — for as long as it takes — for
  * the caller to start talking, then records until they pause and hands
  * the utterance over as a 16 kHz mono WAV (for VastuAgent.transcribe).
@@ -39,7 +39,7 @@ private const val MAX_SPEECH_FRAMES = 1000 // cap one utterance at ~30 s
  * seconds of silence and on some devices (e.g. Samsung) fails to
  * restart afterwards.
  */
-class DemoListener internal constructor() {
+class CallerListener internal constructor() {
     /** Mic is open and waiting for speech. */
     var isListening by mutableStateOf(false)
         internal set
@@ -50,8 +50,8 @@ class DemoListener internal constructor() {
 }
 
 @Composable
-fun rememberDemoListener(active: Boolean, onUtterance: (ByteArray) -> Unit): DemoListener {
-    val listener = remember { DemoListener() }
+fun rememberCallerListener(active: Boolean, onUtterance: (ByteArray) -> Unit): CallerListener {
+    val listener = remember { CallerListener() }
     val currentOnUtterance by rememberUpdatedState(onUtterance)
 
     LaunchedEffect(active) {

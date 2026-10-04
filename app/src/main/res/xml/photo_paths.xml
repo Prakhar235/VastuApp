@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Where the demo call's camera writes photos before they're sent to the AI agent. -->
+<!-- Where the camera writes photos and videos before they're sent to the AI agent Ananya. -->
 <paths>
     <cache-path name="call_photos" path="call_photos/" />
 </paths>

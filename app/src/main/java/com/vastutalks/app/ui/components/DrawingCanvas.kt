@@ -56,17 +56,17 @@ private val palette = listOf(Color.White, VastuSaffron, VastuCopper, Color(0xFF3
 
 /**
  * A local, in-memory freehand drawing surface shown over the in-call
- * screen — a demo of "expert sketches something during a
- * consultation," not a real shared whiteboard yet.
+ * screen — lets the expert sketch something during a consultation;
+ * not a real shared whiteboard yet.
  *
  * On Done, whatever was drawn is rendered to a bitmap and handed back
  * via [onClose] (null if nothing was drawn) so the caller can post it
- * into the chat — see DemoInCallScreen.
+ * into the chat — see AgentInCallScreen.
  *
  * What's NOT here (needed for a real version): the strokes drawn here
  * only exist on this device and are never sent to the other
  * participant in real time — only the final flattened image gets
- * shared, and only into this same device's own demo chat. A real
+ * shared, and only into this same device's own chat. A real
  * implementation would broadcast each stroke as it's drawn — e.g. via
  * Agora's low-latency data channel (`RtcEngine.sendStreamMessage`)
  * for real-time sync during the call, or a Firestore document under

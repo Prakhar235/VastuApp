@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -73,9 +76,6 @@ import java.io.File
  *
  * Also hands back the compass heading the camera app saved in the photo
  * (EXIF GPSImgDirection), when it saved one — many don't.
- *
- * Asks for CAMERA permission first — the app declares it for video
- * calls, and once declared, Android refuses camera intents without it.
  */
 @Composable
 fun rememberPhotoCapture(
@@ -112,13 +112,28 @@ fun rememberPhotoCapture(
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) openCamera() else currentOnError("Camera access is needed to take a photo.")
-    }
+    return rememberCameraPermissionGate(
+        onDenied = { currentOnError("Camera access is needed to take a photo.") },
+        open = ::openCamera
+    )
+}
 
+/**
+ * Wraps [open] so it asks for CAMERA permission first — the app declares
+ * it for video calls, and once declared, Android refuses camera intents
+ * without it.
+ */
+@Composable
+internal fun rememberCameraPermissionGate(onDenied: () -> Unit, open: () -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val currentOpen by rememberUpdatedState(open)
+    val currentOnDenied by rememberUpdatedState(onDenied)
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) currentOpen() else currentOnDenied()
+    }
     return {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            openCamera()
+            currentOpen()
         } else {
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
@@ -174,14 +189,39 @@ fun PhotoReviewSheet(
     onRetake: () -> Unit,
     onDismiss: () -> Unit,
     onSend: (question: String, facing: PhotoFacing?) -> Unit
+) = CaptureReviewSheet(
+    frames = listOf(photo.bitmap),
+    exifHeading = photo.exifHeading,
+    isVideo = false,
+    agentName = agentName,
+    onRetake = onRetake,
+    onDismiss = onDismiss,
+    onSend = onSend
+)
+
+/**
+ * The review sheet shared by photos and videos. A video shows one frame
+ * large with a strip of the others underneath; its direction is the way
+ * the camera faced when recording started.
+ */
+@Composable
+internal fun CaptureReviewSheet(
+    frames: List<Bitmap>,
+    exifHeading: Float?,
+    isVideo: Boolean,
+    agentName: String,
+    onRetake: () -> Unit,
+    onDismiss: () -> Unit,
+    onSend: (question: String, facing: PhotoFacing?) -> Unit
 ) {
     var question by remember { mutableStateOf("") }
-    val image = remember(photo) { photo.bitmap.asImageBitmap() }
+    val images = remember(frames) { frames.map { it.asImageBitmap() } }
+    var shown by remember(frames) { mutableIntStateOf(0) }
     val liveHeading by rememberCameraHeading()
-    var picked by remember(photo) { mutableStateOf<CompassDirection?>(null) }
+    var picked by remember(frames) { mutableStateOf<CompassDirection?>(null) }
     val facing = when {
         picked != null -> PhotoFacing(picked!!.degrees, PhotoFacing.Source.CALLER)
-        photo.exifHeading != null -> PhotoFacing(photo.exifHeading, PhotoFacing.Source.PHOTO)
+        exifHeading != null -> PhotoFacing(exifHeading, PhotoFacing.Source.PHOTO)
         liveHeading != null -> PhotoFacing(liveHeading!!, PhotoFacing.Source.COMPASS)
         else -> null
     }
@@ -223,7 +263,7 @@ fun PhotoReviewSheet(
                         .clickable { onDismiss() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Discard photo", tint = CallTones.TextPrimary, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Close, contentDescription = if (isVideo) "Discard video" else "Discard photo", tint = CallTones.TextPrimary, modifier = Modifier.size(18.dp))
                 }
             }
 
@@ -236,15 +276,36 @@ fun PhotoReviewSheet(
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    bitmap = image,
-                    contentDescription = "Photo to send",
+                    bitmap = images[shown],
+                    contentDescription = if (isVideo) "Video frame ${shown + 1}" else "Photo to send",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
+            if (images.size > 1) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(images) { i, frame ->
+                        Image(
+                            bitmap = frame,
+                            contentDescription = "Show frame ${i + 1}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(2.dp, if (i == shown) VastuPrimary else Color.Transparent, RoundedCornerShape(10.dp))
+                                .clickable { shown = i }
+                        )
+                    }
+                }
+            }
+
             FacingPicker(
                 facing = facing,
+                isVideo = isVideo,
                 onPick = { picked = if (picked == it) null else it } // tap again to go back to automatic
             )
 
@@ -290,7 +351,7 @@ fun PhotoReviewSheet(
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Retake", color = CallTones.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(if (isVideo) "Record again" else "Retake", color = CallTones.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 Box(
                     modifier = Modifier
@@ -308,12 +369,13 @@ fun PhotoReviewSheet(
     }
 }
 
-/** "Camera facing East" plus a row of the eight directions to correct it. */
+/** "Camera facing East" (or "Started facing East" for a video) plus a row of the eight directions to correct it. */
 @Composable
-private fun FacingPicker(facing: PhotoFacing?, onPick: (CompassDirection) -> Unit) {
+private fun FacingPicker(facing: PhotoFacing?, isVideo: Boolean, onPick: (CompassDirection) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
         Text(
-            text = facing?.let { "Camera facing ${it.direction.label} (${it.direction.vastuName})" } ?: "Which way was the camera facing?",
+            text = facing?.let { "${if (isVideo) "Started facing" else "Camera facing"} ${it.direction.label} (${it.direction.vastuName})" }
+                ?: if (isVideo) "Which way did the video start facing?" else "Which way was the camera facing?",
             color = CallTones.TextPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
@@ -321,7 +383,9 @@ private fun FacingPicker(facing: PhotoFacing?, onPick: (CompassDirection) -> Uni
         Text(
             text = when (facing?.source) {
                 PhotoFacing.Source.PHOTO -> "From the compass reading saved in the photo · tap to change"
-                PhotoFacing.Source.COMPASS -> "Live compass — point your phone the way you took the photo, or tap a direction"
+                PhotoFacing.Source.COMPASS ->
+                    if (isVideo) "Live compass — point your phone where you started recording, or tap a direction"
+                    else "Live compass — point your phone the way you took the photo, or tap a direction"
                 PhotoFacing.Source.CALLER -> "Set by you · tap it again to use the compass"
                 null -> "No compass on this phone — tap a direction"
             },

@@ -18,8 +18,8 @@ import com.vastutalks.app.data.repository.CallHistoryRepository
 import com.vastutalks.app.data.repository.UserRepository
 import com.vastutalks.app.ui.screens.auth.CreateAccountScreen
 import com.vastutalks.app.ui.screens.auth.SignInScreen
-import com.vastutalks.app.ui.screens.call.DemoCallingScreen
-import com.vastutalks.app.ui.screens.call.DemoInCallScreen
+import com.vastutalks.app.ui.screens.call.AgentCallingScreen
+import com.vastutalks.app.ui.screens.call.AgentInCallScreen
 import com.vastutalks.app.ui.screens.call.LiveCallingScreen
 import com.vastutalks.app.ui.screens.call.LiveInCallScreen
 import com.vastutalks.app.ui.screens.home.HomeScreen
@@ -134,7 +134,7 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
                 onExpertCardClick = { expertUid, expertName ->
                     navController.navigate(Routes.realExpertProfile(expertUid, expertName))
                 },
-                onTryDemoCall = { navController.navigate(Routes.DEMO_CALLING) }
+                onCallAgent = { navController.navigate(Routes.AGENT_CALLING) }
             )
         }
 
@@ -170,19 +170,19 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
             )
         }
 
-        composable(Routes.DEMO_CALLING) {
-            DemoCallingScreen(
+        composable(Routes.AGENT_CALLING) {
+            AgentCallingScreen(
                 onConnected = {
-                    navController.navigate(Routes.DEMO_IN_CALL) {
-                        popUpTo(Routes.DEMO_CALLING) { inclusive = true }
+                    navController.navigate(Routes.AGENT_IN_CALL) {
+                        popUpTo(Routes.AGENT_CALLING) { inclusive = true }
                     }
                 },
                 onCancel = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.DEMO_IN_CALL) {
-            DemoInCallScreen(
+        composable(Routes.AGENT_IN_CALL) {
+            AgentInCallScreen(
                 onEndCall = {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.HOME) { inclusive = true }

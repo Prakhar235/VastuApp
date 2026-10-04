@@ -62,7 +62,7 @@ val WhiteboardPalette = listOf(Color.White, VastuSaffron, VastuCopper, Color(0xF
 data class UserStroke(val points: List<Offset>, val color: Color)
 
 /**
- * Everything on the demo call's shared whiteboard: the caller's
+ * Everything on the agent call's shared whiteboard: the caller's
  * freehand strokes plus Ananya's latest drawing (from VastuAgent),
  * both on the same square grid with North at the top.
  */

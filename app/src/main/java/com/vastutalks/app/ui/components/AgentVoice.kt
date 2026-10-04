@@ -14,14 +14,14 @@ import java.util.Locale
 /**
  * Thin wrapper around Android's built-in TextToSpeech engine — no
  * extra dependency, no network call required (most devices have an
- * offline-capable TTS engine already installed). This gives the demo
- * "agent" an actual spoken voice during DemoInCallScreen instead of
+ * offline-capable TTS engine already installed). This gives the AI
+ * agent Ananya an actual spoken voice during AgentInCallScreen instead of
  * just text on screen.
  *
  * Speaks whatever VastuAgent replies; [isSpeaking] lets the call
  * screen pause speech recognition so the agent doesn't hear herself.
  */
-class DemoVoice(private val tts: TextToSpeech?, private val pending: PendingUtterances) {
+class AgentVoice(private val tts: TextToSpeech?, private val pending: PendingUtterances) {
     val isSpeaking: Boolean get() = pending.isSpeaking.value
     val isReady: Boolean get() = tts != null
 
@@ -66,7 +66,7 @@ class PendingUtterances {
 }
 
 @Composable
-fun rememberDemoVoice(): DemoVoice {
+fun rememberAgentVoice(): AgentVoice {
     val context = LocalContext.current
     val ttsHolder = remember { mutableStateOf<TextToSpeech?>(null) }
     val pending = remember { PendingUtterances() }
@@ -95,5 +95,5 @@ fun rememberDemoVoice(): DemoVoice {
         }
     }
 
-    return remember(ttsHolder.value) { DemoVoice(ttsHolder.value, pending) }
+    return remember(ttsHolder.value) { AgentVoice(ttsHolder.value, pending) }
 }

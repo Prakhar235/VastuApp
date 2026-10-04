@@ -1,13 +1,13 @@
 package com.vastutalks.app.data.model
 
 /**
- * Keyword-matched canned replies for the demo chat panel. Not a real
- * AI — no model, no memory of the conversation, just simple
- * substring matching against a handful of common Vastu topics with a
- * generic fallback. Good enough to make the demo chat feel like a
- * back-and-forth rather than a one-way script.
+ * Keyword-matched canned replies Ananya falls back on when the OpenAI
+ * model can't be reached (no API key, or the request failed). No model,
+ * no memory of the conversation — just substring matching against a
+ * handful of common Vastu topics with a generic fallback, so the call
+ * still gets a sensible answer.
  */
-object DemoAgentReplies {
+object AgentFallbackReplies {
     private val topicReplies = listOf(
         listOf("kitchen", "stove", "cooking") to
             "For kitchens, the South-East corner works best — that's the fire element's zone. Face East while cooking if you can.",
@@ -24,7 +24,7 @@ object DemoAgentReplies {
         listOf("bathroom", "toilet") to
             "Toilets are best in the West or North-West, and ideally not sharing a wall with your kitchen or pooja room.",
         listOf("price", "cost", "session", "rate") to
-            "This particular session is a free demo, so don't worry about the cost here — a real consultation would show live pricing.",
+            "The running cost of this call is shown at the top of the screen — it's billed by the minute while we talk.",
         listOf("hello", "hi", "hey", "namaste") to
             "Namaste! Happy to help — ask me about any room and I'll share what I can.",
         listOf("draw", "sketch", "whiteboard", "board") to

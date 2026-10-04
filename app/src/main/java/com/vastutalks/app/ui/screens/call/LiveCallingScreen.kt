@@ -55,8 +55,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Caller side of a real (Firestore-signaled) call to a signed-up
- * expert (as opposed to the app's earlier hardcoded-sample-expert
- * demo path, which has since been removed).
+ * expert (as opposed to a call with the AI agent Ananya — see
+ * AgentCallingScreen).
  *
  * Flow: write a CallRequest -> wait for the callee to Accept/Decline
  * (live Firestore listener) -> once accepted, fetch a fresh token

@@ -28,20 +28,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.vastutalks.app.data.model.DemoExpert
+import com.vastutalks.app.data.model.AnanyaAgent
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.VastuCharcoal
 import com.vastutalks.app.ui.theme.VastuPrimary
 import kotlinx.coroutines.delay
 
 /**
- * Fully self-contained "demo" calling screen — no Firestore signaling,
- * no Agora token, no second device. DemoExpert "picks up" on a fixed
- * timer so this always works, every time, for showing off the call
- * UX end-to-end on one phone.
+ * Ringing screen for a call with the AI agent Ananya. There's no
+ * Firestore signaling or Agora token — she's always available, so she
+ * "picks up" after a short ring.
  */
 @Composable
-fun DemoCallingScreen(
+fun AgentCallingScreen(
     onConnected: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -50,11 +49,11 @@ fun DemoCallingScreen(
         onConnected()
     }
 
-    val pulseAnim = rememberInfiniteTransition(label = "demo_pulse")
+    val pulseAnim = rememberInfiniteTransition(label = "ringing_pulse")
     val scale by pulseAnim.animateFloat(
         initialValue = 1f, targetValue = 1.15f,
         animationSpec = infiniteRepeatable(tween(900), repeatMode = RepeatMode.Reverse),
-        label = "demo_pulse_scale"
+        label = "ringing_pulse_scale"
     )
 
     Box(
@@ -67,17 +66,17 @@ fun DemoCallingScreen(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = "https://i.pravatar.cc/300?u=${DemoExpert.AVATAR_SEED}",
+                    model = "https://i.pravatar.cc/300?u=${AnanyaAgent.AVATAR_SEED}",
                     contentDescription = null,
                     modifier = Modifier.size(96.dp).clip(CircleShape).background(VastuPrimary)
                 )
             }
             Box(modifier = Modifier.size(28.dp))
-            Text(DemoExpert.NAME, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(AnanyaAgent.NAME, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Box(modifier = Modifier.size(6.dp))
             Text("Calling…", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
             Box(modifier = Modifier.size(6.dp))
-            Text("Demo call — no real network connection", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+            Text("AI Vastu expert", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
             Box(modifier = Modifier.size(64.dp))
             Box(
                 modifier = Modifier

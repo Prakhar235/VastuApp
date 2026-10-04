@@ -47,14 +47,14 @@ import com.vastutalks.app.ui.theme.VastuPrimary
 
 enum class ChatSender { AGENT, USER }
 
-data class DemoChatMessage(
+data class AgentChatMessage(
     val id: Int,
     val text: String,
     val sender: ChatSender = ChatSender.AGENT,
     val image: ImageBitmap? = null
 )
 
-/** Shared tones for the demo call's dark surfaces. */
+/** Shared tones for the agent call's dark surfaces. */
 object CallTones {
     val Ink = Color(0xFF110F18)
     val Surface = Color(0xFF1C1927)
@@ -65,12 +65,12 @@ object CallTones {
 }
 
 /**
- * The demo call's chat page: the full conversation with Ananya (spoken
+ * The agent call's chat page: the full conversation with Ananya (spoken
  * lines are transcribed in here too) and a box to type a question.
  */
 @Composable
-fun DemoChatPage(
-    messages: List<DemoChatMessage>,
+fun AgentChatPage(
+    messages: List<AgentChatMessage>,
     isAgentTyping: Boolean,
     agentName: String,
     avatarSeed: String,
@@ -108,7 +108,7 @@ fun DemoChatPage(
                 if (message.sender == ChatSender.AGENT) AgentMessage(message, agentName, avatarSeed) else UserMessage(message)
             }
             if (isAgentTyping) {
-                item { AgentMessage(DemoChatMessage(-1, "…"), agentName, avatarSeed, isTyping = true) }
+                item { AgentMessage(AgentChatMessage(-1, "…"), agentName, avatarSeed, isTyping = true) }
             }
         }
 
@@ -159,7 +159,7 @@ fun DemoChatPage(
 }
 
 @Composable
-private fun AgentMessage(message: DemoChatMessage, agentName: String, avatarSeed: String, isTyping: Boolean = false) {
+private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSeed: String, isTyping: Boolean = false) {
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
         AsyncImage(
             model = "https://i.pravatar.cc/300?u=$avatarSeed",
@@ -187,7 +187,7 @@ private fun AgentMessage(message: DemoChatMessage, agentName: String, avatarSeed
 }
 
 @Composable
-private fun UserMessage(message: DemoChatMessage) {
+private fun UserMessage(message: AgentChatMessage) {
     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -202,7 +202,7 @@ private fun UserMessage(message: DemoChatMessage) {
 }
 
 @Composable
-private fun MessageBody(message: DemoChatMessage) {
+private fun MessageBody(message: AgentChatMessage) {
     Column {
         message.image?.let {
             Image(
