@@ -23,10 +23,11 @@ import kotlin.math.sqrt
 private const val SAMPLE_RATE = 16_000
 private const val FRAME_SAMPLES = 480 // 30 ms
 private const val START_FRAMES = 3 // ~90 ms of loud audio = caller started talking
-private const val END_SILENCE_FRAMES = 37 // ~1.1 s of quiet = caller finished
+private const val END_SILENCE_FRAMES = 25 // ~750 ms of quiet = caller finished
 private const val PRE_ROLL_FRAMES = 10 // keep ~300 ms before speech so the first word isn't clipped
 private const val MIN_SPEECH_FRAMES = 12 // ignore blips shorter than ~360 ms
-private const val MAX_SPEECH_FRAMES = 1000 // cap one utterance at ~30 s
+private const val MAX_SPEECH_FRAMES = 500 // cap one utterance at ~15 s
+private const val CALIBRATION_FRAMES = 10 // ~300 ms to measure the room before listening for speech
 
 /**
  * The AI agent's ears. While [rememberCallerListener]'s `active` is
@@ -47,6 +48,9 @@ class CallerListener internal constructor() {
     /** Caller is talking right now. */
     var isHearingSpeech by mutableStateOf(false)
         internal set
+
+    /** Background noise level, carried from one turn to the next; null until first measured. */
+    internal var noiseFloor: Double? = null
 }
 
 @Composable
@@ -58,7 +62,7 @@ fun rememberCallerListener(active: Boolean, onUtterance: (ByteArray) -> Unit): C
         if (!active) return@LaunchedEffect
         listener.isListening = true
         try {
-            val wav = withContext(Dispatchers.IO) { captureUtterance { listener.isHearingSpeech = it } }
+            val wav = withContext(Dispatchers.IO) { captureUtterance(listener) { listener.isHearingSpeech = it } }
             if (wav != null) currentOnUtterance(wav)
         } finally {
             listener.isListening = false
@@ -70,7 +74,7 @@ fun rememberCallerListener(active: Boolean, onUtterance: (ByteArray) -> Unit): C
 
 /** Blocks until one utterance is captured (or the coroutine is cancelled → null). */
 @SuppressLint("MissingPermission") // Caller only activates this once RECORD_AUDIO is granted.
-private suspend fun captureUtterance(onSpeech: (Boolean) -> Unit): ByteArray? = withContext(Dispatchers.IO) {
+private suspend fun captureUtterance(listener: CallerListener, onSpeech: (Boolean) -> Unit): ByteArray? = withContext(Dispatchers.IO) {
     val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
     val recorder = AudioRecord(
         MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -87,7 +91,8 @@ private suspend fun captureUtterance(onSpeech: (Boolean) -> Unit): ByteArray? = 
     val frame = ShortArray(FRAME_SAMPLES)
     val preRoll = ArrayDeque<ShortArray>()
     val speech = mutableListOf<ShortArray>()
-    var noiseFloor = 150.0
+    var noiseFloor = listener.noiseFloor ?: 150.0
+    val calibration = mutableListOf<Double>()
     var loudRun = 0
     var quietRun = 0
     var inSpeech = false
@@ -99,6 +104,18 @@ private suspend fun captureUtterance(onSpeech: (Boolean) -> Unit): ByteArray? = 
             if (read <= 0) continue
             val chunk = frame.copyOf(read)
             val level = rms(chunk)
+
+            // On the first turn, measure the room before listening: a quiet
+            // starting guess makes fan/AC noise look like non-stop talking, so
+            // the caller's pause is never detected. A low percentile ignores
+            // the caller if they start talking straight away.
+            if (listener.noiseFloor == null) {
+                calibration.add(level)
+                if (calibration.size < CALIBRATION_FRAMES) continue
+                noiseFloor = calibration.sorted()[2].coerceIn(50.0, 3000.0)
+                listener.noiseFloor = noiseFloor
+                android.util.Log.d("CallerListener", "Room noise floor: ${noiseFloor.toInt()}")
+            }
 
             if (!inSpeech) {
                 preRoll.addLast(chunk)
@@ -113,12 +130,15 @@ private suspend fun captureUtterance(onSpeech: (Boolean) -> Unit): ByteArray? = 
                 } else {
                     // Track background noise only while nobody is talking.
                     noiseFloor = (noiseFloor * 0.97 + level * 0.03).coerceIn(50.0, 3000.0)
+                    listener.noiseFloor = noiseFloor
                 }
             } else {
                 speech.add(chunk)
                 quietRun = if (level < max(noiseFloor * 2.0, 300.0)) quietRun + 1 else 0
                 if (quietRun >= END_SILENCE_FRAMES || speech.size >= MAX_SPEECH_FRAMES) {
                     if (speech.size - quietRun >= MIN_SPEECH_FRAMES) {
+                        val ending = if (quietRun >= END_SILENCE_FRAMES) "pause" else "length cap"
+                        android.util.Log.d("CallerListener", "Utterance ${speech.size * 30} ms, ended by $ending, noise floor ${noiseFloor.toInt()}")
                         return@withContext toWav(speech)
                     }
                     // Too short to be a real sentence (a cough, a tap) — keep waiting.

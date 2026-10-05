@@ -48,6 +48,9 @@ class VastuAgent(
 ) {
     private val history = mutableListOf<JSONObject>()
 
+    /** What the agent last said, to spot the mic picking up her own voice. */
+    @Volatile private var lastSay: String = ""
+
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 
     /** Greeting when the agent "picks up" the call. */
@@ -127,29 +130,62 @@ class VastuAgent(
      * Speech-to-text for one caller utterance (a 16 kHz WAV from
      * CallerListener). Returns null if nothing intelligible was said or
      * the request failed.
+     *
+     * Spoken Hindi and Urdu sound almost the same, so auto-detection
+     * sometimes writes Hindi speech in Urdu (Arabic) script. The app only
+     * supports English and Hindi, so in that case it's re-run with
+     * whisper-1, which sticks to the language it's given (the gpt-4o
+     * transcribers only treat it as a hint and can still answer in Urdu).
      */
     suspend fun transcribe(wav: ByteArray): String? {
         if (!isConfigured) return null
         return try {
             withContext(Dispatchers.IO) {
-                val boundary = "----vastu${System.currentTimeMillis()}"
-                val body = ByteArrayOutputStream().apply {
-                    fun field(name: String, value: String) = write(
-                        "--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n".toByteArray()
-                    )
-                    field("model", TRANSCRIBE_MODEL)
-                    field("prompt", "A caller asking a Vastu Shastra consultant about their home, possibly in Indian English or Hinglish.")
-                    write("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"speech.wav\"\r\nContent-Type: audio/wav\r\n\r\n".toByteArray())
-                    write(wav)
-                    write("\r\n--$boundary--\r\n".toByteArray())
-                }.toByteArray()
-                val raw = send(TRANSCRIBE_ENDPOINT, "multipart/form-data; boundary=$boundary", body)
-                JSONObject(raw).optString("text").trim().takeIf { it.isNotBlank() }
+                val started = System.currentTimeMillis()
+                val text = transcribeAs(wav, TRANSCRIBE_MODEL, language = null)
+                val heard = if (text != null && text.any { it.isArabicScript() }) {
+                    transcribeAs(wav, HINDI_TRANSCRIBE_MODEL, language = "hi") ?: text
+                } else text
+                android.util.Log.d(
+                    "VastuAgent",
+                    "Heard in ${System.currentTimeMillis() - started} ms: \"$text\"" + if (heard != text) " → as Hindi: \"$heard\"" else ""
+                )
+                heard?.takeUnless { isEchoOfAgent(it) }
             }
         } catch (e: Exception) {
             android.util.Log.w("VastuAgent", "Transcription failed", e)
             null
         }
+    }
+
+    /** True if [heard] is just a piece of the agent's last reply (her voice leaking into the mic). */
+    private fun isEchoOfAgent(heard: String): Boolean {
+        fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+        val h = norm(heard)
+        return h.length >= 6 && norm(lastSay).contains(h)
+    }
+
+    private fun transcribeAs(wav: ByteArray, model: String, language: String?): String? {
+        val boundary = "----vastu${System.currentTimeMillis()}"
+        val body = ByteArrayOutputStream().apply {
+            fun field(name: String, value: String) = write(
+                "--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n".toByteArray()
+            )
+            field("model", model)
+            field("prompt", TRANSCRIBE_PROMPT)
+            if (language != null) field("language", language)
+            write("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"speech.wav\"\r\nContent-Type: audio/wav\r\n\r\n".toByteArray())
+            write(wav)
+            write("\r\n--$boundary--\r\n".toByteArray())
+        }.toByteArray()
+        val raw = send(TRANSCRIBE_ENDPOINT, "multipart/form-data; boundary=$boundary", body)
+        val text = JSONObject(raw).optString("text").trim()
+        // The prompt echoed back (sometimes as "Context: <prompt>") means nothing intelligible was said.
+        fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+        val heard = norm(text)
+        val prompt = norm(TRANSCRIBE_PROMPT)
+        val echoesPrompt = heard.length > 10 && (prompt.contains(heard) || heard.contains(prompt.take(30)))
+        return text.takeIf { it.isNotBlank() && !echoesPrompt }
     }
 
     private suspend fun respond(
@@ -163,8 +199,11 @@ class VastuAgent(
 
         val userMessage = JSONObject().put("role", "user").put("content", userContent(userText, images, detail))
         return try {
+            val started = System.currentTimeMillis()
             val raw = withContext(Dispatchers.IO) { post(buildRequest(userMessage)) }
             val turn = parseTurn(raw)
+            android.util.Log.d("VastuAgent", "Replied in ${System.currentTimeMillis() - started} ms: \"${turn.say}\"")
+            lastSay = turn.say
             if (record) {
                 // A high-detail photo costs ~25k tokens and a video's frames add up;
                 // keep a few low-detail images in the history so follow-up questions
@@ -223,6 +262,12 @@ class VastuAgent(
             .getJSONArray("choices").getJSONObject(0)
             .getJSONObject("message").getString("content")
 
+    /**
+     * No disconnect() here on purpose: reading the response to the end and
+     * closing the stream hands the socket back to the keep-alive pool, so
+     * the next request (each spoken turn makes two) skips a fresh TLS
+     * handshake.
+     */
     private fun send(endpoint: String, contentType: String, body: ByteArray): String {
         val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -232,16 +277,12 @@ class VastuAgent(
             setRequestProperty("Content-Type", contentType)
             setRequestProperty("Authorization", "Bearer $apiKey")
         }
-        try {
-            conn.outputStream.use { it.write(body) }
-            val code = conn.responseCode
-            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw IllegalStateException("OpenAI HTTP $code: $text")
-            return text
-        } finally {
-            conn.disconnect()
-        }
+        conn.outputStream.use { it.write(body) }
+        val code = conn.responseCode
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) throw IllegalStateException("OpenAI HTTP $code: $text")
+        return text
     }
 
     private fun encode(bitmap: Bitmap, maxSide: Int): String {
@@ -263,9 +304,16 @@ class VastuAgent(
         /** Swap for any newer vision-capable chat model on your account. */
         const val MODEL = "gpt-4o-mini"
         const val TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
+        /** Re-transcribes speech that came back in Urdu script; honours `language` strictly. */
+        const val HINDI_TRANSCRIBE_MODEL = "whisper-1"
         private const val ENDPOINT = "https://api.openai.com/v1/chat/completions"
         private const val TRANSCRIBE_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
         private const val MAX_HISTORY = 24
+
+        // Keep this free of example sentences: on noisy or near-silent audio the
+        // transcriber can return the prompt itself, which the agent then "hears".
+        private const val TRANSCRIBE_PROMPT =
+            "A caller asking a Vastu Shastra consultant about their home, in English, Hindi or Hinglish."
 
         private val SYSTEM_PROMPT = """
             You are ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
@@ -273,6 +321,16 @@ class VastuAgent(
             1-3 short sentences, no lists, no markdown, no emojis. Stay on Vastu Shastra, home layout and related
             topics; gently steer back if asked about something unrelated. After answering, stop and let the
             caller talk — don't ramble or ask several questions at once.
+
+            Language: you speak only English and Hindi. If the caller speaks English, reply in English. If they
+            speak Hindi or Hinglish, reply in simple everyday Hindi written in Devanagari script, preferring
+            Hindi words over Urdu/Persian ones (सुझाव not मशवरा, दिशा not तरफ़, ज़रूर is fine). Never reply in
+            Urdu, Arabic or any other language, and never write in Urdu/Arabic script. Speech-to-text sometimes
+            writes the caller's Hindi in Urdu script by mistake — treat that as Hindi and answer in Devanagari.
+            Never tell the caller they are speaking Urdu, and never comment on which language they use.
+            You are a woman: in Hindi use feminine forms for yourself (मैं कर सकती हूँ, मैं बताती हूँ).
+            Don't open every reply with a greeting; greet only once, at the start of the call.
+            Board titles and labels stay in English.
 
             You and the caller share a square whiteboard for the whole call. The caller sketches on it with
             their finger and can send you a picture of the whole board (their strokes plus anything you drew)
@@ -309,6 +367,11 @@ class VastuAgent(
             }
             return AgentTurn(say, board)
         }
+
+        /** Arabic, Urdu and Persian letters (including the presentation-form blocks). */
+        private fun Char.isArabicScript() =
+            this in '؀'..'ۿ' || this in 'ݐ'..'ݿ' || this in 'ࢠ'..'ࣿ' ||
+                this in 'ﭐ'..'﷿' || this in 'ﹰ'..'﻿'
 
         private fun parseShape(o: JSONObject?): BoardShape? {
             if (o == null) return null

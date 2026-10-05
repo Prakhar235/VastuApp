@@ -298,6 +298,12 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     LaunchedEffect(callerTurn) {
         if (callerTurn) delay(500) // let the speaker's last syllable die away first
         micOpen = callerTurn
+        android.util.Log.d(
+            "CallerListener",
+            if (callerTurn) "Mic open" else "Mic closed: speaking=${voice.isSpeaking} thinking=$isAgentTyping " +
+                "transcribing=$isTranscribing muted=$isMuted resumed=$isResumed greeted=$hasGreeted " +
+                "media=${photoToReview != null || videoToReview != null}"
+        )
     }
     val listener = rememberCallerListener(active = micOpen) { wav ->
         isTranscribing = true
