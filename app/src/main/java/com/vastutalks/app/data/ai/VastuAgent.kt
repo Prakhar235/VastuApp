@@ -23,20 +23,24 @@ sealed class BoardShape {
 
     data class Rect(val x: Float, val y: Float, val w: Float, val h: Float, val label: String?, override val color: String) : BoardShape()
     data class Circle(val x: Float, val y: Float, val r: Float, val label: String?, override val color: String) : BoardShape()
-    data class Line(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val arrow: Boolean, override val color: String) : BoardShape()
+    data class Line(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val arrow: Boolean, override val color: String, val label: String? = null) : BoardShape()
     data class Label(val x: Float, val y: Float, val text: String, override val color: String) : BoardShape()
 }
 
 data class BoardDrawing(val title: String, val shapes: List<BoardShape>)
 
-/** What the agent says out loud (and posts to chat), plus an optional whiteboard drawing. */
-data class AgentTurn(val say: String, val board: BoardDrawing? = null)
+/**
+ * What the agent says out loud (and posts to chat), plus an optional
+ * whiteboard drawing and/or the caller's latest photo with her marks on it.
+ */
+data class AgentTurn(val say: String, val board: BoardDrawing? = null, val markedPhoto: Bitmap? = null)
 
 /**
  * Ananya, the AI agent: an OpenAI chat model playing [AnanyaAgent],
- * with memory of the conversation, able to see the user's sketches and
- * to answer with a whiteboard drawing when a layout is easier shown
- * than said.
+ * with memory of the conversation, able to see the caller's photos and
+ * videos and to answer by marking up the photo itself (circles, arrows,
+ * labels — see ImageMarkup). The shared whiteboard is off for now
+ * ([BOARD_ENABLED]).
  *
  * Calls the OpenAI API directly with the key from local.properties
  * (BuildConfig.OPENAI_API_KEY). Falls back to [AgentFallbackReplies] if
@@ -44,9 +48,16 @@ data class AgentTurn(val say: String, val board: BoardDrawing? = null)
  */
 class VastuAgent(
     private val apiKey: String = BuildConfig.OPENAI_API_KEY,
-    private val model: String = MODEL
+    private val model: String = MODEL,
+    private val visionModel: String = VISION_MODEL
 ) {
     private val history = mutableListOf<JSONObject>()
+
+    /**
+     * The caller's latest photo, or their latest video's frames, without
+     * the grid — what the agent's marks get drawn on, in later turns too.
+     */
+    @Volatile private var markable: List<Bitmap> = emptyList()
 
     /** What the agent last said, to spot the mic picking up her own voice. */
     @Volatile private var lastSay: String = ""
@@ -55,7 +66,7 @@ class VastuAgent(
 
     /** Greeting when the agent "picks up" the call. */
     suspend fun greet(): AgentTurn =
-        respond("(The caller has just connected and nothing has been drawn or shared yet. Greet them warmly in one or two sentences and ask what they'd like help with. Do not draw.)", record = false)
+        respond("(The caller has just connected and nothing has been drawn or shared yet. Greet them warmly in one or two sentences and ask what they'd like help with. Do not draw or mark anything.)", record = false)
 
     suspend fun reply(userText: String): AgentTurn = respond(userText)
 
@@ -81,17 +92,18 @@ class VastuAgent(
                 append("bed, stove, sink, mirror, desk, safe, puja shelf, toilet, heavy furniture, plants, colours, clutter, ")
                 append("light — and which direction each one is in using those directions. Then judge them by Vastu for ")
                 append("those directions, mention what is already good, and give the two or three most useful corrections. ")
-                append("Name the directions when you speak. You may use up to five sentences here. If moving something ")
-                append("would help, draw a simple North-up plan of the room with what you saw placed in its real direction ")
-                append("and an arrow showing where it should go.)")
+                append("Name the directions when you speak. You may use up to five sentences here. Mark the photo: circle ")
+                append("what you're talking about and, if something should move, draw an arrow to where it should go.)")
             } else {
                 append("Say what space it is and what you notice — doors, windows, furniture, mirrors, colours, ")
                 append("clutter, light — then give the two or three most useful Vastu suggestions for it. You may use ")
-                append("up to five sentences here. The camera direction is unknown, so ask which way it was facing. If ")
-                append("moving something would help, draw a simple plan of the space showing where it should go.)")
+                append("up to five sentences here. The camera direction is unknown, so ask which way it was facing. ")
+                append("Mark the photo: circle what you're talking about and, if something should move, draw an arrow to ")
+                append("where it should go.)")
             }
         }
-        return respond(note, images = listOf(photo), detail = PhotoDetail.HIGH)
+        markable = listOf(photo)
+        return respond(note, images = listOf(ImageMarkup.withGrid(photo)), detail = PhotoDetail.HIGH, model = visionModel)
     }
 
     /**
@@ -106,7 +118,8 @@ class VastuAgent(
         val note = buildString {
             append("(The caller recorded a ${seconds}-second video of their home")
             if (!question.isNullOrBlank()) append(" and asks: \"$question\"")
-            append(". You can't watch it, so here are ${frames.size} frames taken evenly across it, in order. ")
+            append(". You can't watch it, so here are ${frames.size} frames taken evenly across it, in order ")
+            append("(frame 0 to ${frames.size - 1}). ")
             if (facing != null) {
                 append("For the first frame: ")
                 append(facing.describeForAgent())
@@ -120,10 +133,12 @@ class VastuAgent(
             append("Treat the frames as one walkthrough, not separate photos: say what space or spaces it shows, pick out ")
             append("the important things — doors, windows, bed, stove, sink, mirror, desk, safe, puja shelf, toilet, heavy ")
             append("furniture, plants, colours, clutter, light — and where they are, mention what is already good, and give ")
-            append("the two or three most useful Vastu corrections. You may use up to five sentences here. If moving ")
-            append("something would help, draw a simple North-up plan of the space with an arrow showing where it should go.)")
+            append("the two or three most useful Vastu corrections. You may use up to five sentences here. Mark the ")
+            append("frame that best shows your main point: circle what you're talking about and, if something should ")
+            append("move, draw an arrow to where it should go.)")
         }
-        return respond(note, images = frames, historyImages = 3)
+        markable = frames
+        return respond(note, images = frames.map(ImageMarkup::withGrid), historyImages = 3, model = visionModel)
     }
 
     /**
@@ -193,15 +208,20 @@ class VastuAgent(
         images: List<Bitmap> = emptyList(),
         record: Boolean = true,
         detail: PhotoDetail = PhotoDetail.LOW,
-        historyImages: Int = 1
+        historyImages: Int = 1,
+        model: String = this.model
     ): AgentTurn {
         if (!isConfigured) return fallback(userText, images)
 
         val userMessage = JSONObject().put("role", "user").put("content", userContent(userText, images, detail))
         return try {
             val started = System.currentTimeMillis()
-            val raw = withContext(Dispatchers.IO) { post(buildRequest(userMessage)) }
-            val turn = parseTurn(raw)
+            val raw = withContext(Dispatchers.IO) { post(buildRequest(userMessage, model)) }
+            val turn = parseTurn(raw).let { parsed ->
+                val marks = parseMarks(raw)
+                val target = marks?.let { markable.getOrNull(it.frame.coerceIn(0, markable.size - 1)) }
+                if (marks != null && target != null) parsed.copy(markedPhoto = ImageMarkup.draw(target, marks.shapes)) else parsed
+            }
             android.util.Log.d("VastuAgent", "Replied in ${System.currentTimeMillis() - started} ms: \"${turn.say}\"")
             lastSay = turn.say
             if (record) {
@@ -246,7 +266,7 @@ class VastuAgent(
         return content
     }
 
-    private fun buildRequest(userMessage: JSONObject): JSONObject {
+    private fun buildRequest(userMessage: JSONObject, model: String): JSONObject {
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
         history.forEach { messages.put(it) }
         messages.put(userMessage)
@@ -303,6 +323,12 @@ class VastuAgent(
     companion object {
         /** Swap for any newer vision-capable chat model on your account. */
         const val MODEL = "gpt-4o-mini"
+        /**
+         * For turns where the caller shares a photo or video. Tested on real
+         * room photos: gpt-4.1 puts marks on the right object; gpt-4o-mini and
+         * gpt-4o often circle the wrong thing. Similar speed, costs more.
+         */
+        const val VISION_MODEL = "gpt-4.1"
         const val TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
         /** Re-transcribes speech that came back in Urdu script; honours `language` strictly. */
         const val HINDI_TRANSCRIBE_MODEL = "whisper-1"
@@ -315,7 +341,9 @@ class VastuAgent(
         private const val TRANSCRIBE_PROMPT =
             "A caller asking a Vastu Shastra consultant about their home, in English, Hindi or Hinglish."
 
-        private val SYSTEM_PROMPT = """
+        // Lazy: it's assembled from BOARD_PROMPT and MARKS_PROMPT, declared below.
+        private val SYSTEM_PROMPT by lazy {
+            """
             You are ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
             inside the VastuTalks app. Everything you "say" is read aloud by text-to-speech, so speak naturally:
             1-3 short sentences, no lists, no markdown, no emojis. Stay on Vastu Shastra, home layout and related
@@ -330,20 +358,23 @@ class VastuAgent(
             Never tell the caller they are speaking Urdu, and never comment on which language they use.
             You are a woman: in Hindi use feminine forms for yourself (मैं कर सकती हूँ, मैं बताती हूँ).
             Don't open every reply with a greeting; greet only once, at the start of the call.
-            Board titles and labels stay in English.
+            Labels on drawings and photo marks stay in English.
+        """.trimIndent() + "\n\n" + (if (BOARD_ENABLED) BOARD_PROMPT else "") + MARKS_PROMPT
+        }
 
+        /** The shared whiteboard is hidden for now; flip this to bring it back (also shows the Board page). */
+        const val BOARD_ENABLED = false
+
+        private val BOARD_PROMPT = """
             You and the caller share a square whiteboard for the whole call. The caller sketches on it with
             their finger and can send you a picture of the whole board (their strokes plus anything you drew)
             — refer to what you actually see. When a direction, room placement or layout is easier to show
             than to say, draw on it. The board is a 100x100 grid: x goes left to right (West to East), y goes
             top to bottom (North to South), so the top edge is North. Your drawing appears on top of the
             caller's sketch using the same grid, so you can mark up their plan directly. Each new drawing of
-            yours replaces your previous one. Keep drawings simple (3-12 shapes) and label rooms.
-
-            Always reply with a single JSON object:
-            {
-              "say": "what you speak aloud",
-              "board": null | {
+            yours replaces your previous one. Keep drawings simple (3-12 shapes) and label rooms. To draw, add
+            to your JSON reply:
+            "board": null | {
                 "title": "short caption",
                 "shapes": [
                   {"type": "rect", "x": 10, "y": 10, "w": 30, "h": 25, "label": "Kitchen", "color": "saffron"},
@@ -353,14 +384,52 @@ class VastuAgent(
                   {"type": "text", "x": 80, "y": 15, "text": "Ishan (NE)", "color": "white"}
                 ]
               }
-            }
             Colors: white, saffron, copper, blue, red, green. When you draw, have "say" talk the caller through it.
+
         """.trimIndent()
+
+        private val MARKS_PROMPT = """
+            When the caller shares a photo or video of their home, mark up that actual image so they can see
+            exactly what you mean. The images you get have a faint yellow grid numbered along the top edge (x, 0
+            to 100, left to right) and the left edge (y, 0 to 100, top to bottom); use it to put each mark right
+            on the object, aiming at its centre; use a rect for big things like a bed or cupboard. The caller sees
+            their photo without the grid. Mark only what you talk about, 1-5 marks: circle a problem in red,
+            something good in green, and only when you suggest moving something, a green arrow from it to a
+            visible spot where it should go. Give each mark a short English label of 2-4 words. Never label a
+            wall or corner with a direction (North, South-East…) unless the caller has told you which way the
+            camera faced. Have "say" point to the marks
+            ("the red circle", "the green arrow"). Marks go on the most recent photo or video, also in follow-up
+            answers about it; for a video, say which frame. Don't add marks when no photo or video has been shared
+            or when you aren't talking about something in it.
+
+            Always reply with a single JSON object:
+            {
+              "say": "what you speak aloud",
+              "marks": null | {
+                "frame": 0,
+                "shapes": [
+                  {"type": "circle", "x": 62, "y": 40, "r": 8, "label": "Mirror faces bed", "color": "red"},
+                  {"type": "rect", "x": 10, "y": 55, "w": 30, "h": 25, "label": "Bed", "color": "green"},
+                  {"type": "arrow", "x1": 30, "y1": 70, "x2": 15, "y2": 35, "label": "Move bed here", "color": "green"},
+                  {"type": "text", "x": 80, "y": 12, "text": "North wall", "color": "saffron"}
+                ]
+              }
+            }
+            Marks use percent of the image: x of its width, y of its height; a circle's r is percent of the width.
+        """.trimIndent()
+
+        /** Photo marks in a reply, or null when there are none. */
+        internal fun parseMarks(raw: String): PhotoMarks? {
+            val m = JSONObject(raw).optJSONObject("marks") ?: return null
+            val shapes = m.optJSONArray("shapes") ?: return null
+            val parsed = (0 until shapes.length()).mapNotNull { i -> parseShape(shapes.optJSONObject(i)) }
+            return if (parsed.isEmpty()) null else PhotoMarks(m.optInt("frame", 0), parsed)
+        }
 
         internal fun parseTurn(raw: String): AgentTurn {
             val json = JSONObject(raw)
             val say = json.optString("say").ifBlank { "Sorry, could you say that again?" }
-            val board = json.optJSONObject("board")?.let { b ->
+            val board = json.optJSONObject("board")?.takeIf { BOARD_ENABLED }?.let { b ->
                 val shapes = b.optJSONArray("shapes") ?: return@let null
                 val parsed = (0 until shapes.length()).mapNotNull { i -> parseShape(shapes.optJSONObject(i)) }
                 if (parsed.isEmpty()) null else BoardDrawing(b.optString("title"), parsed)
@@ -382,7 +451,7 @@ class VastuAgent(
                 "rect" -> BoardShape.Rect(f("x"), f("y"), f("w"), f("h"), label(), color)
                 "circle" -> BoardShape.Circle(f("x"), f("y"), f("r"), label(), color)
                 "line" -> BoardShape.Line(f("x1"), f("y1"), f("x2"), f("y2"), arrow = false, color = color)
-                "arrow" -> BoardShape.Line(f("x1"), f("y1"), f("x2"), f("y2"), arrow = true, color = color)
+                "arrow" -> BoardShape.Line(f("x1"), f("y1"), f("x2"), f("y2"), arrow = true, color = color, label = label())
                 "text" -> o.optString("text").takeIf { it.isNotBlank() }?.let { BoardShape.Label(f("x"), f("y"), it, color) }
                 else -> null
             }

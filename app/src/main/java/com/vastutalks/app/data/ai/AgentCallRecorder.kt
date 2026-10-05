@@ -66,11 +66,11 @@ class AgentCallRecorder(context: Context) {
         return name
     }
 
-    /** Saves a camera photo the caller shared, and notes it in the transcript. */
-    fun savePhoto(bitmap: Bitmap, caption: String) {
+    /** Saves a photo (the caller's, or one the agent marked up) and notes it in the transcript. */
+    fun savePhoto(bitmap: Bitmap, caption: String, who: String = "You") {
         photoCount++
         val name = "photo_%02d.jpg".format(photoCount)
-        logLine("You", "[$caption — saved as $name]")
+        logLine(who, "[$caption — saved as $name]")
         io.execute {
             runCatching {
                 File(folder, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }

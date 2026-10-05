@@ -151,7 +151,7 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     val recorder = remember { AgentCallRecorder(context) }
     val board = rememberWhiteboardState()
 
-    var page by remember { mutableStateOf(CallPage.BOARD) }
+    var page by remember { mutableStateOf(if (VastuAgent.BOARD_ENABLED) CallPage.BOARD else CallPage.CHAT) }
     var unread by remember { mutableIntStateOf(0) }
     var elapsedSeconds by remember { mutableStateOf(0) }
     var isMuted by remember { mutableStateOf(false) }
@@ -191,8 +191,19 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
 
     fun postAgentTurn(turn: AgentTurn) {
         voice.speak(turn.say)
-        addMessage(AgentChatMessage(id = chatMessages.size, text = turn.say, sender = ChatSender.AGENT))
+        addMessage(
+            AgentChatMessage(
+                id = chatMessages.size,
+                text = turn.say,
+                sender = ChatSender.AGENT,
+                image = turn.markedPhoto?.asImageBitmap()
+            )
+        )
         recorder.logLine(AnanyaAgent.NAME, turn.say)
+        turn.markedPhoto?.let { marked ->
+            recorder.savePhoto(marked, "Marked up the photo", who = AnanyaAgent.NAME)
+            page = CallPage.CHAT // her marks are on the photo in the chat
+        }
         turn.board?.let { drawing ->
             board.showAgentDrawing(drawing)
             page = CallPage.BOARD // she's explaining on the board — bring it into view
@@ -368,15 +379,17 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
                 cost = "₹%.0f".format(callCost)
             )
 
-            PageSwitch(
-                page = page,
-                unread = unread,
-                onSelect = {
-                    page = it
-                    if (it == CallPage.CHAT) unread = 0
-                },
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 12.dp)
-            )
+            if (VastuAgent.BOARD_ENABLED) {
+                PageSwitch(
+                    page = page,
+                    unread = unread,
+                    onSelect = {
+                        page = it
+                        if (it == CallPage.CHAT) unread = 0
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 12.dp)
+                )
+            }
 
             AnimatedContent(
                 targetState = page,

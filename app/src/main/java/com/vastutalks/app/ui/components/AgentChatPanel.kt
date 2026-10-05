@@ -30,6 +30,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +41,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -203,22 +209,47 @@ private fun UserMessage(message: AgentChatMessage) {
 
 @Composable
 private fun MessageBody(message: AgentChatMessage) {
+    var fullScreen by remember { mutableStateOf(false) }
     Column {
         message.image?.let {
             Image(
                 bitmap = it,
-                contentDescription = "Sketch",
+                contentDescription = if (message.sender == ChatSender.AGENT) "Photo with suggestions marked" else "Shared image",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .padding(bottom = 8.dp)
-                    .width(210.dp)
+                    // Her marked-up photos are bigger so the labels are readable.
+                    .width(if (message.sender == ChatSender.AGENT) 262.dp else 210.dp)
                     // Photos keep their shape (portrait/landscape); sketches are square.
                     .aspectRatio((it.width.toFloat() / it.height).coerceIn(0.6f, 1.6f))
                     .clip(RoundedCornerShape(12.dp))
+                    .clickable { fullScreen = true }
             )
+            if (fullScreen) FullScreenImage(it) { fullScreen = false }
         }
         if (message.text.isNotBlank()) {
             Text(message.text, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+        }
+    }
+}
+
+/** Tap-to-close full-screen view of a chat image, so marks and labels can be read. */
+@Composable
+private fun FullScreenImage(image: ImageBitmap, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = image,
+                contentDescription = "Full-screen image",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
