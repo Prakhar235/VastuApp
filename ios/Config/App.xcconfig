@@ -1,0 +1,10 @@
+// Shared build settings. The OpenAI key for Ananya lives in
+// Secrets.xcconfig (gitignored) — copy Secrets.example.xcconfig to
+// Secrets.xcconfig and fill it in. Without it the agent falls back to
+// canned replies, same as the Android app without OPENAI_API_KEY.
+//
+// NOTE: like Android's BuildConfig, anything here ships inside the app
+// and can be extracted — route through a Cloud Function before
+// distributing the app.
+OPENAI_API_KEY =
+#include? "Secrets.xcconfig"
