@@ -1,0 +1,631 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		006871FE484F215481FA6A09 /* CommonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD684531D1557E055D54C61 /* CommonViews.swift */; };
+		05D6B32DCEA319B258508ECE /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */; };
+		0C20F2D39FBFC57E79E86695 /* AgoraCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */; };
+		0D0D845CB9FCBB866B8E1401 /* Whiteboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 585D720C6EE2719FE4ABF1FA /* Whiteboard.swift */; };
+		22E83046280D5474C654451A /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35D6AA14550CB2EB7FB76BE2 /* FirebaseMessaging */; };
+		22FC3781414A18BC1293628A /* PhotoFacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */; };
+		260F1C2F8D7E6CE45A2506A5 /* VastuAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8352EDAEA7B4DD616A208582 /* VastuAgent.swift */; };
+		2C2F78B1C4F55C569B94DB8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0684FFCC517C615912DFA1E /* Theme.swift */; };
+		2E4317715C7336789E9D7247 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E2F300FC3737AF43684AAE24 /* FirebaseAuth */; };
+		451B6E23F691211C8B16B220 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 17E0458B31D7328EF41605C6 /* FirebaseFirestore */; };
+		4D1ECAC1F28AB4308DF35343 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3370906C1D784B64C5126110 /* HomeView.swift */; };
+		4D6E27AB72114247B11526F5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7632E2C0B345DDBA7FF518C /* Assets.xcassets */; };
+		4DB6B5C7532406227E5A6562 /* SplashOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1BB51A90F738B8E39FD173 /* SplashOnboardingView.swift */; };
+		65873AD2DCB254CD042347FA /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68FA9A1F11E69293803DD17F /* AppRouter.swift */; };
+		67B3A4B6F8C588402D3D6F4A /* AgentCallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8919A1C92378F4F2EC6CF228 /* AgentCallViews.swift */; };
+		67BA1D2B58516017A91F9EE3 /* CallerListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5742BB9CB40CA3D370EC8A4 /* CallerListener.swift */; };
+		7A8C830E2C0E02481AAE7C10 /* AgentVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DBC13ED748C34AE03B7B522 /* AgentVoice.swift */; };
+		7B6FB418A2F055AD87596008 /* Repositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844D1555DE45B82B9BE58136 /* Repositories.swift */; };
+		7D89C7DC40F34CCB707CC307 /* AgentChatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F75B2A212AA1777DCD7F7D1 /* AgentChatPage.swift */; };
+		802E1D05EF5970511325745E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D214035060E4D5EBF0BDCC2 /* Models.swift */; };
+		8253A826E9A2169A288B55AF /* MediaCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D727B6D2CA8994CE94297324 /* MediaCapture.swift */; };
+		868CD2631A7E81414D3A0D20 /* nanopb in Frameworks */ = {isa = PBXBuildFile; productRef = 8A3C815D67F59E20334AA770 /* nanopb */; };
+		89E5209CE3403BA4A87A3E35 /* CameraHeading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61460EDA5C03FE95FB40C9FB /* CameraHeading.swift */; };
+		B0BE5E586C17481F71DF94F1 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = EC6F1C766B5AA72E163E73DE /* FirebaseFunctions */; };
+		B1A771A9C82D057BFE691029 /* AgentCallRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68876E883725F7B396041A57 /* AgentCallRecorder.swift */; };
+		B8179FA57145FEC1BA2AD69D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE24A4F3307CC769DFBADA2B /* RootView.swift */; };
+		BC92AC5DC35313DB0EDD1A98 /* LiveCallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19A34620560162EE1E243592 /* LiveCallViews.swift */; };
+		CB35BDFE8D341A7EBF6E1972 /* ProfileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991B87439E997E7A5975944D /* ProfileViews.swift */; };
+		DCFD50C80D2C66BF7E45D137 /* VastuPosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A74693822FFF9C66127EA1 /* VastuPosts.swift */; };
+		EA1B5DD06E61EC1B6CE57424 /* VastuTalksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EEA2B1C8F5DEEAD7E6EFDB /* VastuTalksApp.swift */; };
+		F1D1CF673C29DA44A31D85E2 /* RtcBasic in Frameworks */ = {isa = PBXBuildFile; productRef = 50EC5E8C34A45A90EE0656E0 /* RtcBasic */; };
+		FA83C786404D8F2A7C3925FC /* VastuIllustrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgoraCallManager.swift; sourceTree = "<group>"; };
+		19A34620560162EE1E243592 /* LiveCallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCallViews.swift; sourceTree = "<group>"; };
+		1AD684531D1557E055D54C61 /* CommonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonViews.swift; sourceTree = "<group>"; };
+		2F2D5751D39154436556FB16 /* VastuTalks.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VastuTalks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3370906C1D784B64C5126110 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		4DBC13ED748C34AE03B7B522 /* AgentVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentVoice.swift; sourceTree = "<group>"; };
+		585D720C6EE2719FE4ABF1FA /* Whiteboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Whiteboard.swift; sourceTree = "<group>"; };
+		61460EDA5C03FE95FB40C9FB /* CameraHeading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraHeading.swift; sourceTree = "<group>"; };
+		62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuIllustrations.swift; sourceTree = "<group>"; };
+		64A74693822FFF9C66127EA1 /* VastuPosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuPosts.swift; sourceTree = "<group>"; };
+		68876E883725F7B396041A57 /* AgentCallRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCallRecorder.swift; sourceTree = "<group>"; };
+		68FA9A1F11E69293803DD17F /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFacing.swift; sourceTree = "<group>"; };
+		8352EDAEA7B4DD616A208582 /* VastuAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuAgent.swift; sourceTree = "<group>"; };
+		844D1555DE45B82B9BE58136 /* Repositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Repositories.swift; sourceTree = "<group>"; };
+		8919A1C92378F4F2EC6CF228 /* AgentCallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCallViews.swift; sourceTree = "<group>"; };
+		991B87439E997E7A5975944D /* ProfileViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViews.swift; sourceTree = "<group>"; };
+		9D214035060E4D5EBF0BDCC2 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		9F75B2A212AA1777DCD7F7D1 /* AgentChatPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatPage.swift; sourceTree = "<group>"; };
+		C0EEA2B1C8F5DEEAD7E6EFDB /* VastuTalksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuTalksApp.swift; sourceTree = "<group>"; };
+		C7632E2C0B345DDBA7FF518C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
+		D5742BB9CB40CA3D370EC8A4 /* CallerListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallerListener.swift; sourceTree = "<group>"; };
+		D727B6D2CA8994CE94297324 /* MediaCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCapture.swift; sourceTree = "<group>"; };
+		DF1BB51A90F738B8E39FD173 /* SplashOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashOnboardingView.swift; sourceTree = "<group>"; };
+		EE24A4F3307CC769DFBADA2B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F0684FFCC517C615912DFA1E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		FC32EEAB0B0451AD511242B7 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8D0029F4F08E1AE6C2955228 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2E4317715C7336789E9D7247 /* FirebaseAuth in Frameworks */,
+				451B6E23F691211C8B16B220 /* FirebaseFirestore in Frameworks */,
+				B0BE5E586C17481F71DF94F1 /* FirebaseFunctions in Frameworks */,
+				22E83046280D5474C654451A /* FirebaseMessaging in Frameworks */,
+				868CD2631A7E81414D3A0D20 /* nanopb in Frameworks */,
+				F1D1CF673C29DA44A31D85E2 /* RtcBasic in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		05DA7F2B47EAFC5B49E71C79 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2F2D5751D39154436556FB16 /* VastuTalks.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1A7E8F947EC6216D7AAF63DE /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				1AD684531D1557E055D54C61 /* CommonViews.swift */,
+				62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		39DB15FAC75DE95C52EAAB74 /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				68876E883725F7B396041A57 /* AgentCallRecorder.swift */,
+				7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */,
+				8352EDAEA7B4DD616A208582 /* VastuAgent.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		40EF35881BB8B52B3D3E8D37 /* Call */ = {
+			isa = PBXGroup;
+			children = (
+				0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */,
+			);
+			path = Call;
+			sourceTree = "<group>";
+		};
+		462CF2523E860426079C4533 /* AgentCall */ = {
+			isa = PBXGroup;
+			children = (
+				8919A1C92378F4F2EC6CF228 /* AgentCallViews.swift */,
+				9F75B2A212AA1777DCD7F7D1 /* AgentChatPage.swift */,
+				4DBC13ED748C34AE03B7B522 /* AgentVoice.swift */,
+				D5742BB9CB40CA3D370EC8A4 /* CallerListener.swift */,
+				61460EDA5C03FE95FB40C9FB /* CameraHeading.swift */,
+				D727B6D2CA8994CE94297324 /* MediaCapture.swift */,
+				585D720C6EE2719FE4ABF1FA /* Whiteboard.swift */,
+			);
+			path = AgentCall;
+			sourceTree = "<group>";
+		};
+		4EF1B5A10DDDF58B74D5ECD7 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				462CF2523E860426079C4533 /* AgentCall */,
+				1A7E8F947EC6216D7AAF63DE /* Components */,
+				B3D060EDD3ECC6A59D53A021 /* Screens */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		7BC935B8333553AE487A3A98 /* VastuTalks */ = {
+			isa = PBXGroup;
+			children = (
+				A4861DFAB51EB85E3FA3566F /* App */,
+				A08CF6F9D4C5A7CAD0713651 /* Data */,
+				A349CAF6BCDCF14BEFFE96A2 /* Resources */,
+				E232976CAB7C30B64B3BE04D /* Theme */,
+				4EF1B5A10DDDF58B74D5ECD7 /* UI */,
+			);
+			path = VastuTalks;
+			sourceTree = "<group>";
+		};
+		965A5A00C5505545D38867A3 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				FC32EEAB0B0451AD511242B7 /* App.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		A03C7736EAD84BA40337E7C5 /* Repositories */ = {
+			isa = PBXGroup;
+			children = (
+				844D1555DE45B82B9BE58136 /* Repositories.swift */,
+			);
+			path = Repositories;
+			sourceTree = "<group>";
+		};
+		A08CF6F9D4C5A7CAD0713651 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				39DB15FAC75DE95C52EAAB74 /* AI */,
+				40EF35881BB8B52B3D3E8D37 /* Call */,
+				F0709B35194D07A00804CBB8 /* Models */,
+				A03C7736EAD84BA40337E7C5 /* Repositories */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		A349CAF6BCDCF14BEFFE96A2 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				C7632E2C0B345DDBA7FF518C /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		A4861DFAB51EB85E3FA3566F /* App */ = {
+			isa = PBXGroup;
+			children = (
+				68FA9A1F11E69293803DD17F /* AppRouter.swift */,
+				EE24A4F3307CC769DFBADA2B /* RootView.swift */,
+				C0EEA2B1C8F5DEEAD7E6EFDB /* VastuTalksApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B3D060EDD3ECC6A59D53A021 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */,
+				3370906C1D784B64C5126110 /* HomeView.swift */,
+				19A34620560162EE1E243592 /* LiveCallViews.swift */,
+				991B87439E997E7A5975944D /* ProfileViews.swift */,
+				DF1BB51A90F738B8E39FD173 /* SplashOnboardingView.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		CAA96E8261F058FA78162E09 = {
+			isa = PBXGroup;
+			children = (
+				965A5A00C5505545D38867A3 /* Config */,
+				7BC935B8333553AE487A3A98 /* VastuTalks */,
+				05DA7F2B47EAFC5B49E71C79 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E232976CAB7C30B64B3BE04D /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				F0684FFCC517C615912DFA1E /* Theme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		F0709B35194D07A00804CBB8 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				9D214035060E4D5EBF0BDCC2 /* Models.swift */,
+				64A74693822FFF9C66127EA1 /* VastuPosts.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5BDDBF8374883F912508629C /* VastuTalks */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00E337CF6BDC853600674685 /* Build configuration list for PBXNativeTarget "VastuTalks" */;
+			buildPhases = (
+				2DA6A90139ABF19C4CDC4C92 /* Sources */,
+				99EFF7B7F28859B3F75E93A4 /* Resources */,
+				8D0029F4F08E1AE6C2955228 /* Frameworks */,
+				0D67AD1DE871929D84CC2DCB /* Copy GoogleService-Info.plist */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VastuTalks;
+			packageProductDependencies = (
+				E2F300FC3737AF43684AAE24 /* FirebaseAuth */,
+				17E0458B31D7328EF41605C6 /* FirebaseFirestore */,
+				EC6F1C766B5AA72E163E73DE /* FirebaseFunctions */,
+				35D6AA14550CB2EB7FB76BE2 /* FirebaseMessaging */,
+				8A3C815D67F59E20334AA770 /* nanopb */,
+				50EC5E8C34A45A90EE0656E0 /* RtcBasic */,
+			);
+			productName = VastuTalks;
+			productReference = 2F2D5751D39154436556FB16 /* VastuTalks.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5568D9A34F7A94E9DAEEC355 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					5BDDBF8374883F912508629C = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = CD8F1BB2A76F3273D2B5B390 /* Build configuration list for PBXProject "VastuTalks" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = CAA96E8261F058FA78162E09;
+			packageReferences = (
+				8E5E249BCBAAD4CFD4CB6909 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */,
+				5DAC51405575E5739C3899EE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				7DEFD023034CE7B8584AACFA /* XCRemoteSwiftPackageReference "nanopb" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5BDDBF8374883F912508629C /* VastuTalks */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		99EFF7B7F28859B3F75E93A4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D6E27AB72114247B11526F5 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		0D67AD1DE871929D84CC2DCB /* Copy GoogleService-Info.plist */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy GoogleService-Info.plist";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "SRC=\"${PROJECT_DIR}/VastuTalks/GoogleService-Info.plist\"\nif [ -f \"$SRC\" ]; then\n  cp \"$SRC\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\nelse\n  echo \"warning: VastuTalks/GoogleService-Info.plist is missing — the app will show a setup screen. See README.md.\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2DA6A90139ABF19C4CDC4C92 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1A771A9C82D057BFE691029 /* AgentCallRecorder.swift in Sources */,
+				67B3A4B6F8C588402D3D6F4A /* AgentCallViews.swift in Sources */,
+				7D89C7DC40F34CCB707CC307 /* AgentChatPage.swift in Sources */,
+				7A8C830E2C0E02481AAE7C10 /* AgentVoice.swift in Sources */,
+				0C20F2D39FBFC57E79E86695 /* AgoraCallManager.swift in Sources */,
+				65873AD2DCB254CD042347FA /* AppRouter.swift in Sources */,
+				05D6B32DCEA319B258508ECE /* AuthViews.swift in Sources */,
+				67BA1D2B58516017A91F9EE3 /* CallerListener.swift in Sources */,
+				89E5209CE3403BA4A87A3E35 /* CameraHeading.swift in Sources */,
+				006871FE484F215481FA6A09 /* CommonViews.swift in Sources */,
+				4D1ECAC1F28AB4308DF35343 /* HomeView.swift in Sources */,
+				BC92AC5DC35313DB0EDD1A98 /* LiveCallViews.swift in Sources */,
+				8253A826E9A2169A288B55AF /* MediaCapture.swift in Sources */,
+				802E1D05EF5970511325745E /* Models.swift in Sources */,
+				22FC3781414A18BC1293628A /* PhotoFacing.swift in Sources */,
+				CB35BDFE8D341A7EBF6E1972 /* ProfileViews.swift in Sources */,
+				7B6FB418A2F055AD87596008 /* Repositories.swift in Sources */,
+				B8179FA57145FEC1BA2AD69D /* RootView.swift in Sources */,
+				4DB6B5C7532406227E5A6562 /* SplashOnboardingView.swift in Sources */,
+				2C2F78B1C4F55C569B94DB8B /* Theme.swift in Sources */,
+				260F1C2F8D7E6CE45A2506A5 /* VastuAgent.swift in Sources */,
+				FA83C786404D8F2A7C3925FC /* VastuIllustrations.swift in Sources */,
+				DCFD50C80D2C66BF7E45D137 /* VastuPosts.swift in Sources */,
+				EA1B5DD06E61EC1B6CE57424 /* VastuTalksApp.swift in Sources */,
+				0D0D845CB9FCBB866B8E1401 /* Whiteboard.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0406238E7D845DA8180867B6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = FC32EEAB0B0451AD511242B7 /* App.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BD5A9ACF97F9E49CF637DE32 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = FC32EEAB0B0451AD511242B7 /* App.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E446FC506CD18C1B6063F958 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/VastuTalks.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "$(inherited) -ObjC";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vastutalks.app;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		FAD461B599C710CDF3EC18A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/VastuTalks.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "$(inherited) -ObjC";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vastutalks.app;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00E337CF6BDC853600674685 /* Build configuration list for PBXNativeTarget "VastuTalks" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E446FC506CD18C1B6063F958 /* Debug */,
+				FAD461B599C710CDF3EC18A2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CD8F1BB2A76F3273D2B5B390 /* Build configuration list for PBXProject "VastuTalks" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0406238E7D845DA8180867B6 /* Debug */,
+				BD5A9ACF97F9E49CF637DE32 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5DAC51405575E5739C3899EE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 10.29.0;
+			};
+		};
+		7DEFD023034CE7B8584AACFA /* XCRemoteSwiftPackageReference "nanopb" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/nanopb";
+			requirement = {
+				kind = exactVersion;
+				version = 2.30909.0;
+			};
+		};
+		8E5E249BCBAAD4CFD4CB6909 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AgoraIO/AgoraRtcEngine_iOS";
+			requirement = {
+				kind = exactVersion;
+				version = 4.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		17E0458B31D7328EF41605C6 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DAC51405575E5739C3899EE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		35D6AA14550CB2EB7FB76BE2 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DAC51405575E5739C3899EE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		50EC5E8C34A45A90EE0656E0 /* RtcBasic */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8E5E249BCBAAD4CFD4CB6909 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */;
+			productName = RtcBasic;
+		};
+		8A3C815D67F59E20334AA770 /* nanopb */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7DEFD023034CE7B8584AACFA /* XCRemoteSwiftPackageReference "nanopb" */;
+			productName = nanopb;
+		};
+		E2F300FC3737AF43684AAE24 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DAC51405575E5739C3899EE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		EC6F1C766B5AA72E163E73DE /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5DAC51405575E5739C3899EE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 5568D9A34F7A94E9DAEEC355 /* Project object */;
+}

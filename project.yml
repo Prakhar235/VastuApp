@@ -1,0 +1,66 @@
+# XcodeGen spec for the iOS app. The generated VastuTalks.xcodeproj is
+# checked in, so you only need XcodeGen if you change this file:
+#   xcodegen generate   (run from this folder)
+name: VastuTalks
+options:
+  bundleIdPrefix: com.vastutalks
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/App.xcconfig
+  Release: Config/App.xcconfig
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    exactVersion: 10.29.0 # last line that builds with Xcode 14
+  nanopb:
+    url: https://github.com/firebase/nanopb
+    exactVersion: 2.30909.0 # newer releases need iOS 12+ targets, which Firebase 10 + Xcode 14 can't build
+  AgoraRtc:
+    url: https://github.com/AgoraIO/AgoraRtcEngine_iOS
+    exactVersion: 4.5.1 # same engine version as the Android app
+targets:
+  VastuTalks:
+    type: application
+    platform: iOS
+    sources:
+      - path: VastuTalks
+        excludes:
+          - GoogleService-Info.plist # copied by the build phase below, if present
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vastutalks.app
+        INFOPLIST_FILE: Config/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/VastuTalks.entitlements
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        OTHER_LDFLAGS: $(inherited) -ObjC
+    postBuildScripts:
+      - name: Copy GoogleService-Info.plist
+        basedOnDependencyAnalysis: false
+        script: |
+          SRC="${PROJECT_DIR}/VastuTalks/GoogleService-Info.plist"
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
+          else
+            echo "warning: VastuTalks/GoogleService-Info.plist is missing — the app will show a setup screen. See README.md."
+          fi
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseFunctions
+      - package: Firebase
+        product: FirebaseMessaging
+      - package: nanopb
+        product: nanopb
+      - package: AgoraRtc
+        product: RtcBasic

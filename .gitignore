@@ -1,0 +1,11 @@
+# Per-developer config — see README.md
+VastuTalks/GoogleService-Info.plist
+Config/Secrets.xcconfig
+build/
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.DS_Store
+
+# Stray copies of the Firebase config — only VastuTalks/ is read by the build
+GoogleService-Info.plist

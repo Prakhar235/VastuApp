@@ -1,0 +1,28 @@
+diff --git a/functions/index.js b/functions/index.js
+index 7910de3..383986d 100644
+--- a/functions/index.js
++++ b/functions/index.js
+@@ -43,9 +43,23 @@ exports.onCallRequestCreated = functions.firestore
+       android: {
+         priority: "high",
+       },
++      // iOS doesn't show data-only pushes, so iPhones get a visible
++      // "Incoming call" alert with sound; tapping it opens the app's
++      // incoming-call screen (the data fields above ride along).
++      // Android ignores this block.
+       apns: {
+         headers: {
+           "apns-priority": "10",
++          "apns-push-type": "alert",
++        },
++        payload: {
++          aps: {
++            alert: {
++              title: `Incoming ${call.callType === "VIDEO" ? "video" : "audio"} call`,
++              body: call.callerName || "Someone",
++            },
++            sound: "default",
++          },
+         },
+       },
+     };
