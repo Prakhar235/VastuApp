@@ -45,12 +45,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,7 +97,10 @@ import com.vastutalks.app.ui.components.CapturedVideo
 import com.vastutalks.app.ui.components.VideoReviewSheet
 import com.vastutalks.app.ui.components.rememberVideoCapture
 import com.vastutalks.app.ui.components.PhotoReviewSheet
+import com.vastutalks.app.ui.components.ShareMediaActions
+import com.vastutalks.app.ui.components.ShareMediaMenu
 import com.vastutalks.app.ui.components.rememberPhotoCapture
+import com.vastutalks.app.ui.components.rememberPhotoPicker
 import com.vastutalks.app.ui.components.WhiteboardPalette
 import com.vastutalks.app.ui.components.WhiteboardState
 import com.vastutalks.app.ui.components.rememberCallerListener
@@ -194,12 +194,12 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
         addMessage(
             AgentChatMessage(
                 id = chatMessages.size,
-                text = turn.say,
+                text = turn.chatText,
                 sender = ChatSender.AGENT,
                 image = turn.markedPhoto?.asImageBitmap()
             )
         )
-        recorder.logLine(AnanyaAgent.NAME, turn.say)
+        recorder.logLine(AnanyaAgent.NAME, turn.chatText)
         turn.markedPhoto?.let { marked ->
             recorder.savePhoto(marked, "Marked up the photo", who = AnanyaAgent.NAME)
             page = CallPage.CHAT // her marks are on the photo in the chat
@@ -247,6 +247,11 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
         onCaptured = { photoToReview = it }
     )
 
+    val pickPhoto = rememberPhotoPicker(
+        onError = { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() },
+        onPicked = { photoToReview = it }
+    )
+
     val recordVideo = rememberVideoCapture(
         onError = { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() },
         onCaptured = { videoToReview = it }
@@ -270,8 +275,8 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
 
     fun sendPhoto(photo: android.graphics.Bitmap, question: String, facing: PhotoFacing?) {
         photoToReview = null
-        val caption = question.ifBlank { "What does Vastu say about this space?" } +
-            (facing?.let { " · camera facing ${it.direction.label}" } ?: "")
+        val caption = question.ifBlank { "इस जगह के बारे में वास्तु क्या कहता है?" } +
+            (facing?.let { " · कैमरा ${it.direction.label} की ओर" } ?: "")
         recorder.savePhoto(photo, "Shared a photo: $caption")
         postMedia(photo, caption)
         askAgent { agent.reviewPhoto(photo, question, facing) }
@@ -280,7 +285,7 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     fun sendVideo(video: CapturedVideo, question: String, facing: PhotoFacing?) {
         videoToReview = null
         val caption = "Video (${maxOf(1, video.durationMs / 1000)}s): " +
-            question.ifBlank { "What does Vastu say about this space?" } +
+            question.ifBlank { "इस जगह के बारे में वास्तु क्या कहता है?" } +
             (facing?.let { " · started facing ${it.direction.label}" } ?: "")
         recorder.saveVideo(video.file, "Shared a video: $caption")
         postMedia(video.frames.first(), caption)
@@ -430,8 +435,7 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
                     if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     else isMuted = !isMuted
                 },
-                onTakePhoto = takePhoto,
-                onRecordVideo = recordVideo,
+                media = ShareMediaActions(takePhoto, pickPhoto, recordVideo),
                 onEndCall = onEndCall
             )
         }
@@ -733,8 +737,7 @@ private fun CallControls(
     isHearing: Boolean,
     isListening: Boolean,
     onToggleMic: () -> Unit,
-    onTakePhoto: () -> Unit,
-    onRecordVideo: () -> Unit,
+    media: ShareMediaActions,
     onEndCall: () -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "mic")
@@ -798,23 +801,7 @@ private fun CallControls(
             ) {
                 Icon(Icons.Outlined.PhotoCamera, contentDescription = "Share a photo or video for Vastu advice", tint = CallTones.TextPrimary, modifier = Modifier.size(22.dp))
             }
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                containerColor = CallTones.SurfaceRaised,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Take a photo", color = CallTones.TextPrimary) },
-                    leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = CallTones.TextPrimary) },
-                    onClick = { menuOpen = false; onTakePhoto() }
-                )
-                DropdownMenuItem(
-                    text = { Text("Record a video (up to 30s)", color = CallTones.TextPrimary) },
-                    leadingIcon = { Icon(Icons.Outlined.Videocam, contentDescription = null, tint = CallTones.TextPrimary) },
-                    onClick = { menuOpen = false; onRecordVideo() }
-                )
-            }
+            ShareMediaMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, actions = media)
         }
     }
 }

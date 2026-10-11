@@ -119,6 +119,38 @@ fun rememberPhotoCapture(
 }
 
 /**
+ * Returns a function that opens the gallery / file picker and hands back
+ * the chosen photo, loaded the same way as a camera photo (EXIF rotation
+ * fixed, scaled to at most [maxSide] px, saved compass heading if any).
+ * Needs no permission: the picker grants access to just that one image.
+ */
+@Composable
+fun rememberPhotoPicker(
+    maxSide: Int = 1600,
+    onError: (String) -> Unit,
+    onPicked: (CapturedPhoto) -> Unit
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentOnPicked by rememberUpdatedState(onPicked)
+    val currentOnError by rememberUpdatedState(onError)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult // nothing picked
+        scope.launch {
+            val photo = withContext(Dispatchers.IO) { runCatching { loadPhoto(context, uri, maxSide) }.getOrNull() }
+            if (photo != null) currentOnPicked(photo) else currentOnError("यह फ़ोटो खुल नहीं पाई — कोई दूसरी चुनें।")
+        }
+    }
+    return {
+        try {
+            launcher.launch("image/*")
+        } catch (e: ActivityNotFoundException) {
+            currentOnError("No gallery app found on this device.")
+        }
+    }
+}
+
+/**
  * Wraps [open] so it asks for CAMERA permission first — the app declares
  * it for video calls, and once declared, Android refuses camera intents
  * without it.
@@ -247,9 +279,9 @@ internal fun CaptureReviewSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Ask about this space", color = CallTones.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (isVideo) "इस वीडियो पर वास्तु सलाह" else "इस फ़ोटो पर वास्तु सलाह", color = CallTones.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "$agentName will suggest Vastu improvements",
+                        "$agentName फ़ोटो पर निशान लगाकर वास्तु सुझाव देंगी",
                         color = CallTones.TextMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 2.dp)
@@ -320,7 +352,7 @@ internal fun CaptureReviewSheet(
             ) {
                 if (question.isEmpty()) {
                     Text(
-                        "Add a note (optional) — e.g. “bedroom, door faces east”",
+                        "कुछ पूछना हो तो लिखें (ज़रूरी नहीं) — जैसे “बेडरूम, दरवाज़ा पूर्व में”",
                         color = CallTones.TextMuted,
                         fontSize = 14.sp
                     )
@@ -362,7 +394,7 @@ internal fun CaptureReviewSheet(
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Ask $agentName", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text("$agentName से पूछें", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
         }

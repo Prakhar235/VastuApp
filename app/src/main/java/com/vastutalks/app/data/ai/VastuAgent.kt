@@ -32,8 +32,21 @@ data class BoardDrawing(val title: String, val shapes: List<BoardShape>)
 /**
  * What the agent says out loud (and posts to chat), plus an optional
  * whiteboard drawing and/or the caller's latest photo with her marks on it.
+ * [details] is her written, point-by-point read of a photo — one line per
+ * numbered mark — shown in the chat but not read aloud.
  */
-data class AgentTurn(val say: String, val board: BoardDrawing? = null, val markedPhoto: Bitmap? = null)
+data class AgentTurn(
+    val say: String,
+    val board: BoardDrawing? = null,
+    val markedPhoto: Bitmap? = null,
+    val details: String? = null
+) {
+    /** What goes in the chat bubble: the reply plus the written details. */
+    val chatText: String get() = if (details.isNullOrBlank()) say else "$say\n\n$details"
+}
+
+/** On a voice call she keeps it short; in the text chat she can write more. */
+enum class AgentMode { CALL, CHAT }
 
 /**
  * Ananya, the AI agent: an OpenAI chat model playing [AnanyaAgent],
@@ -47,6 +60,7 @@ data class AgentTurn(val say: String, val board: BoardDrawing? = null, val marke
  * there's no key or the request fails, so the call never dead-ends.
  */
 class VastuAgent(
+    private val mode: AgentMode = AgentMode.CALL,
     private val apiKey: String = BuildConfig.OPENAI_API_KEY,
     private val model: String = MODEL,
     private val visionModel: String = VISION_MODEL
@@ -64,9 +78,31 @@ class VastuAgent(
 
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 
-    /** Greeting when the agent "picks up" the call. */
-    suspend fun greet(): AgentTurn =
-        respond("(The caller has just connected and nothing has been drawn or shared yet. Greet them warmly in one or two sentences and ask what they'd like help with. Do not draw or mark anything.)", record = false)
+    /** The photo or video frames her marks go on, to save with the conversation. */
+    val markableImages: List<Bitmap> get() = markable
+
+    /** The conversation as the model sees it (her replies with their marks), to save between sessions. */
+    fun exportHistory(): String = JSONArray(history).toString()
+
+    /**
+     * Picks a saved conversation back up, so she remembers what was asked,
+     * what she saw and what she marked; [images] is the last photo or video
+     * frames, so follow-ups can still be marked on it.
+     */
+    fun restore(historyJson: String, images: List<Bitmap>) {
+        val saved = JSONArray(historyJson)
+        history.clear()
+        for (i in 0 until saved.length()) saved.optJSONObject(i)?.let(history::add)
+        trimHistory()
+        markable = images
+    }
+
+    /** Greeting when the agent "picks up" the call, or the chat opens. */
+    suspend fun greet(): AgentTurn = respond(
+        if (mode == AgentMode.CALL) "(The caller has just connected and nothing has been drawn or shared yet. Greet them warmly in Hindi in one or two sentences and ask what they'd like help with. Do not draw or mark anything.)"
+        else "(The user has just opened the chat and nothing has been shared yet. Greet them warmly in Hindi in one or two sentences, and tell them they can ask a question or upload a photo of any room for Vastu suggestions marked on the photo. Do not mark anything.)",
+        record = false
+    )
 
     suspend fun reply(userText: String): AgentTurn = respond(userText)
 
@@ -83,24 +119,13 @@ class VastuAgent(
      */
     suspend fun reviewPhoto(photo: Bitmap, question: String?, facing: PhotoFacing?): AgentTurn {
         val note = buildString {
-            append("(The caller took this photo of their home with their camera")
+            append("(The caller shared this photo of their home")
             if (!question.isNullOrBlank()) append(" and asks: \"$question\"")
             append(". ")
-            if (facing != null) {
-                append(facing.describeForAgent())
-                append(" First work out what space this is and pick out the important things in it — doors, windows, ")
-                append("bed, stove, sink, mirror, desk, safe, puja shelf, toilet, heavy furniture, plants, colours, clutter, ")
-                append("light — and which direction each one is in using those directions. Then judge them by Vastu for ")
-                append("those directions, mention what is already good, and give the two or three most useful corrections. ")
-                append("Name the directions when you speak. You may use up to five sentences here. Mark the photo: circle ")
-                append("what you're talking about and, if something should move, draw an arrow to where it should go.)")
-            } else {
-                append("Say what space it is and what you notice — doors, windows, furniture, mirrors, colours, ")
-                append("clutter, light — then give the two or three most useful Vastu suggestions for it. You may use ")
-                append("up to five sentences here. The camera direction is unknown, so ask which way it was facing. ")
-                append("Mark the photo: circle what you're talking about and, if something should move, draw an arrow to ")
-                append("where it should go.)")
-            }
+            if (facing != null) append(facing.describeForAgent()).append(" ")
+            else append("The camera direction is unknown; judge what you can without directions and ask which way it faced. ")
+            append(PHOTO_READ_STEPS)
+            append(")")
         }
         markable = listOf(photo)
         return respond(note, images = listOf(ImageMarkup.withGrid(photo)), detail = PhotoDetail.HIGH, model = visionModel)
@@ -130,12 +155,9 @@ class VastuAgent(
             } else {
                 append("The camera direction is unknown, so ask which way the video started facing. ")
             }
-            append("Treat the frames as one walkthrough, not separate photos: say what space or spaces it shows, pick out ")
-            append("the important things — doors, windows, bed, stove, sink, mirror, desk, safe, puja shelf, toilet, heavy ")
-            append("furniture, plants, colours, clutter, light — and where they are, mention what is already good, and give ")
-            append("the two or three most useful Vastu corrections. You may use up to five sentences here. Mark the ")
-            append("frame that best shows your main point: circle what you're talking about and, if something should ")
-            append("move, draw an arrow to where it should go.)")
+            append("Treat the frames as one walkthrough, not separate photos. ")
+            append(PHOTO_READ_STEPS)
+            append(" Put the marks on the one frame that shows the most of what you judge.)")
         }
         markable = frames
         return respond(note, images = frames.map(ImageMarkup::withGrid), historyImages = 3, model = visionModel)
@@ -237,7 +259,7 @@ class VastuAgent(
                 )
             }
             history.add(JSONObject().put("role", "assistant").put("content", raw))
-            while (history.size > MAX_HISTORY) history.removeAt(0)
+            trimHistory()
             turn
         } catch (e: Exception) {
             android.util.Log.w("VastuAgent", "OpenAI request failed, using canned reply", e)
@@ -245,8 +267,27 @@ class VastuAgent(
         }
     }
 
+    /**
+     * Keeps the history to [maxHistory] messages. Only the latest
+     * [KEEP_IMAGE_TURNS] photo turns keep their images; older ones become
+     * a text note, so a long chat stays fast and cheap but she still knows
+     * what was shared and what she said about it.
+     */
+    private fun trimHistory() {
+        while (history.size > maxHistory) history.removeAt(0)
+        var imageTurns = 0
+        for (i in history.indices.reversed()) {
+            val content = history[i].opt("content") as? JSONArray ?: continue
+            if (++imageTurns <= KEEP_IMAGE_TURNS) continue
+            val text = content.optJSONObject(0)?.optString("text").orEmpty()
+            history[i] = JSONObject().put("role", "user").put("content", "$text [photo shared earlier; no longer attached]")
+        }
+    }
+
+    private val maxHistory get() = if (mode == AgentMode.CHAT) MAX_CHAT_HISTORY else MAX_HISTORY
+
     private fun fallback(userText: String, images: List<Bitmap>): AgentTurn = AgentTurn(
-        if (images.isNotEmpty()) "Thanks for sharing that! Let me know which area of it you'd like suggestions for."
+        if (images.isNotEmpty()) "शेयर करने के लिए धन्यवाद! अभी मैं इसे ठीक से देख नहीं पा रही हूँ — थोड़ी देर बाद फिर से भेजिए।"
         else AgentFallbackReplies.replyFor(userText)
     )
 
@@ -267,7 +308,7 @@ class VastuAgent(
     }
 
     private fun buildRequest(userMessage: JSONObject, model: String): JSONObject {
-        val messages = JSONArray().put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+        val messages = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt(mode)))
         history.forEach { messages.put(it) }
         messages.put(userMessage)
         return JSONObject()
@@ -335,31 +376,64 @@ class VastuAgent(
         private const val ENDPOINT = "https://api.openai.com/v1/chat/completions"
         private const val TRANSCRIBE_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
         private const val MAX_HISTORY = 24
+        /** The text chat is saved and picked up again later, so she remembers more of it. */
+        private const val MAX_CHAT_HISTORY = 80
+        private const val KEEP_IMAGE_TURNS = 2
 
         // Keep this free of example sentences: on noisy or near-silent audio the
         // transcriber can return the prompt itself, which the agent then "hears".
         private const val TRANSCRIBE_PROMPT =
             "A caller asking a Vastu Shastra consultant about their home, in English, Hindi or Hinglish."
 
-        // Lazy: it's assembled from BOARD_PROMPT and MARKS_PROMPT, declared below.
-        private val SYSTEM_PROMPT by lazy {
-            """
-            You are ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
-            inside the VastuTalks app. Everything you "say" is read aloud by text-to-speech, so speak naturally:
-            1-3 short sentences, no lists, no markdown, no emojis. Stay on Vastu Shastra, home layout and related
-            topics; gently steer back if asked about something unrelated. After answering, stop and let the
-            caller talk — don't ramble or ask several questions at once.
+        /**
+         * What she does with every shared photo, asked or not: find what's in
+         * it, judge each thing, and mark and number it so the written list
+         * and the photo line up.
+         */
+        private const val PHOTO_READ_STEPS =
+            "Even if they asked nothing specific, do a full Vastu read of it: 1) work out what room or space this is; " +
+                "2) find every Vastu-relevant thing you can actually see — doors, windows, bed, stove, sink, mirror, desk, " +
+                "safe or locker, puja shelf or idols, toilet, staircase, heavy furniture, TV, plants, water, clocks, " +
+                "pictures, colours, clutter, beams, light — and, where the directions are known, which direction each " +
+                "is in; 3) judge each one by Vastu: what is already good, what is a problem and why. Mark every thing " +
+                "you judge on the photo (up to 8 marks), numbered in the same order as your \"details\" list. In \"say\" " +
+                "give the overall verdict and the two or three most important corrections, naming the directions."
 
-            Language: you speak only English and Hindi. If the caller speaks English, reply in English. If they
-            speak Hindi or Hinglish, reply in simple everyday Hindi written in Devanagari script, preferring
-            Hindi words over Urdu/Persian ones (सुझाव not मशवरा, दिशा not तरफ़, ज़रूर is fine). Never reply in
-            Urdu, Arabic or any other language, and never write in Urdu/Arabic script. Speech-to-text sometimes
-            writes the caller's Hindi in Urdu script by mistake — treat that as Hindi and answer in Devanagari.
-            Never tell the caller they are speaking Urdu, and never comment on which language they use.
-            You are a woman: in Hindi use feminine forms for yourself (मैं कर सकती हूँ, मैं बताती हूँ).
-            Don't open every reply with a greeting; greet only once, at the start of the call.
-            Labels on drawings and photo marks stay in English.
-        """.trimIndent() + "\n\n" + (if (BOARD_ENABLED) BOARD_PROMPT else "") + MARKS_PROMPT
+        private fun systemPrompt(mode: AgentMode): String {
+            val style = if (mode == AgentMode.CALL) """
+                You are ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
+                inside the VastuTalks app. Everything you "say" is read aloud by text-to-speech, so speak naturally:
+                1-3 short sentences (up to five when reading a photo or video), no lists, no emojis, and no markdown
+                except the ** highlighting below.
+                After answering, stop and let the caller talk — don't ramble or ask several questions at once.
+                Don't open every reply with a greeting; greet only once, at the start of the call.
+            """.trimIndent() else """
+                You are ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant chatting by text
+                inside the VastuTalks app. Write plain text (no emojis, and no markdown except the ** highlighting below): a short paragraph, or a few
+                short lines starting with "• " when listing steps. Be specific and practical, and don't pad.
+                Don't open every reply with a greeting; greet only once, at the start of the chat.
+            """.trimIndent()
+            return style + "\n" + """
+                Stay on Vastu Shastra, home layout and related topics; gently steer back if asked about something
+                unrelated.
+
+                Language: Hindi is your main language. Always reply in simple everyday Hindi written in Devanagari
+                script, preferring Hindi words over Urdu/Persian ones (सुझाव not मशवरा, दिशा not तरफ़, ज़रूर is fine),
+                even when the caller writes in English or Hinglish. Common English words people use in Hindi are fine
+                (बेडरूम, किचन, मिरर). Switch to English only if the caller asks you to speak English, and then keep
+                using English until they ask for Hindi again. Never reply in Urdu, Arabic or any other language, and
+                never write in Urdu/Arabic script. Speech-to-text sometimes writes the caller's Hindi in Urdu script
+                by mistake — treat that as Hindi. Never tell the caller they are speaking Urdu, and never comment on
+                which language they use. You are a woman: in Hindi use feminine forms for yourself (मैं कर सकती हूँ,
+                मैं बताती हूँ). Name directions in Hindi with the Vastu name where it helps (उत्तर-पूर्व / ईशान).
+                Labels on drawings and photo marks are short and in the same language as your reply.
+
+                Highlighting: wrap every suggestion — each thing you advise the caller to do, change, move, add or
+                avoid — in double asterisks, e.g. "**बेड को दक्षिण-पश्चिम कोने में रखें**", so it stands out in
+                the chat. Highlight only the advice itself (a short phrase or one sentence), not explanations,
+                greetings or praise. This applies to "say" and to each line of "details"; never use asterisks in
+                mark labels.
+            """.trimIndent() + "\n\n" + (if (BOARD_ENABLED) BOARD_PROMPT else "") + MARKS_PROMPT
         }
 
         /** The shared whiteboard is hidden for now; flip this to bring it back (also shows the Board page). */
@@ -393,25 +467,30 @@ class VastuAgent(
             exactly what you mean. The images you get have a faint yellow grid numbered along the top edge (x, 0
             to 100, left to right) and the left edge (y, 0 to 100, top to bottom); use it to put each mark right
             on the object, aiming at its centre; use a rect for big things like a bed or cupboard. The caller sees
-            their photo without the grid. Mark only what you talk about, 1-5 marks: circle a problem in red,
-            something good in green, and only when you suggest moving something, a green arrow from it to a
-            visible spot where it should go. Give each mark a short English label of 2-4 words. Never label a
-            wall or corner with a direction (North, South-East…) unless the caller has told you which way the
-            camera faced. Have "say" point to the marks
-            ("the red circle", "the green arrow"). Marks go on the most recent photo or video, also in follow-up
-            answers about it; for a video, say which frame. Don't add marks when no photo or video has been shared
-            or when you aren't talking about something in it.
+            their photo without the grid. Only mark things you can really see — never guess an object that isn't
+            there. Circle or box a problem in red, something good in green, and when you suggest moving
+            something, add a green arrow from it to a visible spot where it should go. Start each circle or box
+            label with its number, then 2-4 words ("1 आईना बेड के सामने", "2 पूजा स्थान सही"); arrows and text
+            need no number. Never label a wall or corner with a direction unless you know which way the camera
+            faced. Have "say" point to the marks by number and colour ("लाल घेरा 1", "हरा तीर"). Marks go on the
+            most recent photo or video, also in follow-up answers about it; for a video, say which frame. Don't
+            add marks when no photo or video has been shared or when you aren't talking about something in it.
+
+            With marks, also fill "details": one line per numbered mark, in order, written for the caller to
+            read — "1. <what it is and where> — <ठीक है / समस्या: why> — **<what to do>**" — so the photo and the
+            list match. Leave "details" null when there are no marks.
 
             Always reply with a single JSON object:
             {
               "say": "what you speak aloud",
+              "details": null | "1. ...\n2. ...",
               "marks": null | {
                 "frame": 0,
                 "shapes": [
-                  {"type": "circle", "x": 62, "y": 40, "r": 8, "label": "Mirror faces bed", "color": "red"},
-                  {"type": "rect", "x": 10, "y": 55, "w": 30, "h": 25, "label": "Bed", "color": "green"},
-                  {"type": "arrow", "x1": 30, "y1": 70, "x2": 15, "y2": 35, "label": "Move bed here", "color": "green"},
-                  {"type": "text", "x": 80, "y": 12, "text": "North wall", "color": "saffron"}
+                  {"type": "circle", "x": 62, "y": 40, "r": 8, "label": "1 आईना बेड के सामने", "color": "red"},
+                  {"type": "rect", "x": 10, "y": 55, "w": 30, "h": 25, "label": "2 बेड", "color": "green"},
+                  {"type": "arrow", "x1": 30, "y1": 70, "x2": 15, "y2": 35, "label": "बेड यहाँ रखें", "color": "green"},
+                  {"type": "text", "x": 80, "y": 12, "text": "उत्तर की दीवार", "color": "saffron"}
                 ]
               }
             }
@@ -428,13 +507,14 @@ class VastuAgent(
 
         internal fun parseTurn(raw: String): AgentTurn {
             val json = JSONObject(raw)
-            val say = json.optString("say").ifBlank { "Sorry, could you say that again?" }
+            val say = json.optString("say").ifBlank { "माफ़ कीजिए, क्या आप फिर से बता सकते हैं?" }
+            val details = json.optString("details").trim().takeIf { it.isNotBlank() && it != "null" }
             val board = json.optJSONObject("board")?.takeIf { BOARD_ENABLED }?.let { b ->
                 val shapes = b.optJSONArray("shapes") ?: return@let null
                 val parsed = (0 until shapes.length()).mapNotNull { i -> parseShape(shapes.optJSONObject(i)) }
                 if (parsed.isEmpty()) null else BoardDrawing(b.optString("title"), parsed)
             }
-            return AgentTurn(say, board)
+            return AgentTurn(say, board, details = details)
         }
 
         /** Arabic, Urdu and Persian letters (including the presentation-form blocks). */
@@ -445,14 +525,14 @@ class VastuAgent(
         private fun parseShape(o: JSONObject?): BoardShape? {
             if (o == null) return null
             fun f(key: String) = o.optDouble(key, 0.0).toFloat().coerceIn(0f, 100f)
-            fun label() = o.optString("label").takeIf { it.isNotBlank() && it != "null" }
+            fun label() = o.optString("label").replace("**", "").takeIf { it.isNotBlank() && it != "null" }
             val color = o.optString("color", "white")
             return when (o.optString("type")) {
                 "rect" -> BoardShape.Rect(f("x"), f("y"), f("w"), f("h"), label(), color)
                 "circle" -> BoardShape.Circle(f("x"), f("y"), f("r"), label(), color)
                 "line" -> BoardShape.Line(f("x1"), f("y1"), f("x2"), f("y2"), arrow = false, color = color)
                 "arrow" -> BoardShape.Line(f("x1"), f("y1"), f("x2"), f("y2"), arrow = true, color = color, label = label())
-                "text" -> o.optString("text").takeIf { it.isNotBlank() }?.let { BoardShape.Label(f("x"), f("y"), it, color) }
+                "text" -> o.optString("text").replace("**", "").takeIf { it.isNotBlank() }?.let { BoardShape.Label(f("x"), f("y"), it, color) }
                 else -> null
             }
         }

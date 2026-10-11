@@ -25,8 +25,9 @@ class AgentVoice(private val tts: TextToSpeech?, private val pending: PendingUtt
     val isSpeaking: Boolean get() = pending.isSpeaking.value
     val isReady: Boolean get() = tts != null
 
-    fun speak(text: String) {
+    fun speak(reply: String) {
         if (tts == null) return
+        val text = reply.replace("**", "") // highlighting is for the chat; don't read it out
         // Hindi replies are in Devanagari, which the English voice can't read.
         val isHindi = text.any { it in 'ऀ'..'ॿ' }
         val hindiResult = if (isHindi) tts.setLanguage(HINDI) else null

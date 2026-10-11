@@ -14,4 +14,9 @@ object AnanyaAgent {
     const val AVATAR_SEED = "demo-expert-ananya"
     const val RATING = 4.9
     const val PRICE_PER_SESSION = 1200
+    /**
+     * Calling her is hidden for now — only the chat is offered. Flip this to
+     * bring back the "Call Ananya" card on Home and the call button in the chat.
+     */
+    const val CALL_ENABLED = false
 }

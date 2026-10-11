@@ -26,6 +26,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,13 +49,18 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.vastutalks.app.ui.theme.VastuPrimary
+import com.vastutalks.app.ui.theme.VastuSaffron
 
 enum class ChatSender { AGENT, USER }
 
@@ -70,9 +81,37 @@ object CallTones {
     val TextMuted = Color(0xFF9D98B3)
 }
 
+/** Ways to show Ananya a space: camera photo, a photo from the gallery, or a short video. */
+class ShareMediaActions(val takePhoto: () -> Unit, val pickPhoto: () -> Unit, val recordVideo: () -> Unit)
+
+/** Drop-down with the three [ShareMediaActions]. */
+@Composable
+fun ShareMediaMenu(expanded: Boolean, onDismiss: () -> Unit, actions: ShareMediaActions) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        containerColor = CallTones.SurfaceRaised,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        listOf(
+            Triple("फ़ोटो खींचें", Icons.Outlined.PhotoCamera, actions.takePhoto),
+            Triple("गैलरी से फ़ोटो अपलोड करें", Icons.Outlined.PhotoLibrary, actions.pickPhoto),
+            Triple("वीडियो रिकॉर्ड करें (30 सेकंड तक)", Icons.Outlined.Videocam, actions.recordVideo)
+        ).forEach { (label, icon, action) ->
+            DropdownMenuItem(
+                text = { Text(label, color = CallTones.TextPrimary) },
+                leadingIcon = { Icon(icon, contentDescription = null, tint = CallTones.TextPrimary) },
+                onClick = { onDismiss(); action() }
+            )
+        }
+    }
+}
+
 /**
- * The agent call's chat page: the full conversation with Ananya (spoken
- * lines are transcribed in here too) and a box to type a question.
+ * The conversation with Ananya — the chat page of a call (spoken lines
+ * are transcribed in here too) or the whole text-chat screen — and a box
+ * to type a question. With [media], the box also gets a button to share
+ * a photo or video.
  */
 @Composable
 fun AgentChatPage(
@@ -83,7 +122,9 @@ fun AgentChatPage(
     inputText: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    media: ShareMediaActions? = null,
+    emptyHint: String = "आप और $agentName जो भी कहेंगे, वह यहाँ दिखेगा।"
 ) {
     val listState = rememberLazyListState()
 
@@ -102,7 +143,7 @@ fun AgentChatPage(
             if (messages.isEmpty() && !isAgentTyping) {
                 item {
                     Text(
-                        "Everything you and $agentName say shows up here.",
+                        emptyHint,
                         color = CallTones.TextMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
@@ -125,12 +166,34 @@ fun AgentChatPage(
                 .clip(RoundedCornerShape(26.dp))
                 .background(CallTones.Surface)
                 .border(1.dp, CallTones.Hairline, RoundedCornerShape(26.dp))
-                .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = if (media != null) 6.dp else 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (media != null) {
+                Box {
+                    var menuOpen by remember { mutableStateOf(false) }
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(CallTones.SurfaceRaised)
+                            .clickable { menuOpen = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.AddPhotoAlternate,
+                            contentDescription = "Share a photo or video",
+                            tint = CallTones.TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    ShareMediaMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, actions = media)
+                }
+            }
             Box(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                 if (inputText.isEmpty()) {
-                    Text("Message $agentName…", color = CallTones.TextMuted, fontSize = 14.sp)
+                    Text("$agentName से पूछें…", color = CallTones.TextMuted, fontSize = 14.sp)
                 }
                 BasicTextField(
                     value = inputText,
@@ -183,7 +246,7 @@ private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSee
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 if (isTyping) {
-                    Text("typing…", color = CallTones.TextMuted, fontSize = 14.sp)
+                    Text("लिख रही हैं…", color = CallTones.TextMuted, fontSize = 14.sp)
                 } else {
                     MessageBody(message)
                 }
@@ -228,8 +291,36 @@ private fun MessageBody(message: AgentChatMessage) {
             if (fullScreen) FullScreenImage(it) { fullScreen = false }
         }
         if (message.text.isNotBlank()) {
-            Text(message.text, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+            Text(
+                if (message.sender == ChatSender.AGENT) highlightSuggestions(message.text) else AnnotatedString(message.text),
+                color = Color.White,
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
         }
+    }
+}
+
+/**
+ * Ananya wraps each suggestion in **double asterisks** (see VastuAgent's
+ * prompt); show those parts bold in saffron on a soft saffron wash so
+ * the advice stands out from the explanation. An unclosed ** is shown
+ * as is.
+ */
+private fun highlightSuggestions(text: String): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    while (i < text.length) {
+        val start = text.indexOf("**", i)
+        val end = if (start >= 0) text.indexOf("**", start + 2) else -1
+        if (start < 0 || end < 0) {
+            append(text.substring(i))
+            break
+        }
+        append(text.substring(i, start))
+        withStyle(SpanStyle(color = VastuSaffron, fontWeight = FontWeight.Bold, background = VastuSaffron.copy(alpha = 0.14f))) {
+            append(text.substring(start + 2, end))
+        }
+        i = end + 2
     }
 }
 
