@@ -9,6 +9,15 @@ package com.vastutalks.app.data.model
  * and uid are always used on top of this — only these presentational
  * details are placeholders.
  */
+/**
+ * Calls with experts are free for now: prices, the wallet and per-call
+ * cost are hidden everywhere. Flip this to show them again once real
+ * billing exists.
+ */
+object CallPricing {
+    const val PAID_CALLS = false
+}
+
 data class ExpertDisplayExtras(
     val specialty: String,
     val experienceYears: Int,

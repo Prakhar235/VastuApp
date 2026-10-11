@@ -11,13 +11,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vastutalks.app.ui.theme.PrimaryButtonGradient
+import com.vastutalks.app.ui.theme.VastuPrimary
 
 @Composable
 fun GradientButton(
@@ -32,8 +32,9 @@ fun GradientButton(
             .fillMaxWidth()
             .height(54.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(PrimaryButtonGradient)
-            .alpha(if (enabled) 1f else 0.5f)
+            // Disabled is a pale violet (not just faded text) so it's obvious
+            // the form isn't complete yet.
+            .then(if (enabled) Modifier.background(PrimaryButtonGradient) else Modifier.background(VastuPrimary.copy(alpha = 0.35f)))
             .clickable(
                 enabled = enabled && !isLoading,
                 onClick = onClick

@@ -51,16 +51,22 @@ import com.vastutalks.app.data.repository.CallSignalingRepository
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.VastuCharcoal
 import com.vastutalks.app.ui.theme.VastuPrimary
+import com.vastutalks.app.data.repository.UserRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private const val RING_TIMEOUT_MILLIS = 45_000L
 
 /**
  * Caller side of a real (Firestore-signaled) call to a signed-up
  * expert (as opposed to a call with the AI agent Ananya — see
  * AgentCallingScreen).
  *
- * Flow: write a CallRequest -> wait for the callee to Accept/Decline
- * (live Firestore listener) -> once accepted, fetch a fresh token
- * from the generateAgoraToken Cloud Function -> join Agora.
+ * Flow: check the expert is online and not on another call -> write a
+ * CallRequest -> wait for the callee to Accept/Decline (live Firestore
+ * listener; gives up after [RING_TIMEOUT_MILLIS]) -> once accepted,
+ * fetch a fresh token from the generateAgoraToken Cloud Function ->
+ * join Agora.
  */
 @Composable
 fun LiveCallingScreen(
@@ -79,6 +85,8 @@ fun LiveCallingScreen(
     var errorText by remember { mutableStateOf<String?>(null) }
     var permissionsDenied by remember { mutableStateOf(false) }
     var callId by remember { mutableStateOf<String?>(null) }
+    var channelName by remember { mutableStateOf<String?>(null) }
+    var answered by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -108,6 +116,18 @@ fun LiveCallingScreen(
             return@LaunchedEffect
         }
 
+        // Don't ring someone who can't pick up.
+        val expert = UserRepository().getExpert(calleeUid).getOrNull()
+        val now = System.currentTimeMillis()
+        if (expert != null && !expert.isPresentAt(now)) {
+            errorText = "$calleeName is offline right now. Please try again later."
+            return@LaunchedEffect
+        }
+        if (expert != null && expert.isBusyAt(now)) {
+            errorText = "$calleeName is on another call. Please try again in a few minutes."
+            return@LaunchedEffect
+        }
+
         val result = signalingRepository.createCallRequest(
             callerUid = me.uid,
             callerName = me.displayName ?: "Someone",
@@ -116,7 +136,10 @@ fun LiveCallingScreen(
             callType = callType.name
         )
         result.fold(
-            onSuccess = { request -> callId = request.callId },
+            onSuccess = { request ->
+                callId = request.callId
+                channelName = request.channelName
+            },
             onFailure = { e -> errorText = e.message ?: "Couldn't start the call." }
         )
     }
@@ -127,6 +150,8 @@ fun LiveCallingScreen(
         signalingRepository.listenForCallStatus(id).collect { call ->
             when (call?.status) {
                 CallRequestStatus.ACCEPTED.name -> {
+                    if (answered) return@collect // the listener can fire again for the same accept
+                    answered = true
                     statusText = "Connecting…"
                     coroutineScope.launch {
                         val tokenResult = tokenRepository.fetchOrCreateExpertToken(calleeUid, call.channelName)
@@ -140,9 +165,22 @@ fun LiveCallingScreen(
                         )
                     }
                 }
-                CallRequestStatus.DECLINED.name -> errorText = "$calleeName declined the call."
+                CallRequestStatus.DECLINED.name -> {
+                    answered = true
+                    errorText = "$calleeName declined the call."
+                }
                 else -> {}
             }
+        }
+    }
+
+    // Stop ringing if nobody answers.
+    LaunchedEffect(callId) {
+        val id = callId ?: return@LaunchedEffect
+        delay(RING_TIMEOUT_MILLIS)
+        if (!answered) {
+            signalingRepository.updateStatus(id, CallRequestStatus.CANCELLED)
+            errorText = "$calleeName didn't answer. Please try again later."
         }
     }
 
@@ -150,10 +188,9 @@ fun LiveCallingScreen(
     val agoraError by AgoraCallManager.errorMessage.collectAsState()
     LaunchedEffect(connectionState) {
         if (connectionState == CallConnectionState.JOINED) {
-            val id = callId
-            if (id != null) {
-                onConnected("call-$id", calleeName)
-            }
+            // The Agora channel ("expert-<uid>"), which LiveInCallScreen and the
+            // call-history logging use to tell which side is the expert.
+            channelName?.let { onConnected(it, calleeName) }
         }
     }
     LaunchedEffect(agoraError) {

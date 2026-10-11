@@ -8,11 +8,33 @@ import android.media.RingtoneManager
 import android.os.Build
 
 const val INCOMING_CALL_CHANNEL_ID = "incoming_calls"
+/** Likes, comments and replies on posts — an ordinary notification, no ringing. */
+const val POST_ACTIVITY_CHANNEL_ID = "post_activity"
+/** New chat messages. */
+const val MESSAGES_CHANNEL_ID = "messages"
 
 class VastuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         createIncomingCallChannel()
+        createPostActivityChannel()
+    }
+
+    private fun createPostActivityChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val channel = NotificationChannel(
+            POST_ACTIVITY_CHANNEL_ID,
+            "Likes and comments",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "When someone likes or comments on your post, or an expert replies to your comment"
+        }
+        getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+
+        val messages = NotificationChannel(MESSAGES_CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "New chat messages from users and experts"
+        }
+        getSystemService(NotificationManager::class.java)?.createNotificationChannel(messages)
     }
 
     /**

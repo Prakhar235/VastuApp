@@ -25,9 +25,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
@@ -35,10 +36,16 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,15 +71,19 @@ import coil.compose.AsyncImage
 import com.vastutalks.app.data.call.AgoraCallManager
 import com.vastutalks.app.data.call.CallConnectionState
 import com.vastutalks.app.data.call.TokenRepository
-import com.vastutalks.app.ui.components.VastuIllustration
-import com.vastutalks.app.ui.components.VastuIllustrationType
-import com.vastutalks.app.ui.components.illustrationTypeFor
+import com.vastutalks.app.ui.components.ProfileAvatar
+import com.vastutalks.app.ui.components.ProfilePhotoEditor
+import com.vastutalks.app.ui.components.PostCard
+import com.vastutalks.app.ui.components.VastuTextField
 import com.vastutalks.app.data.model.CallRequest
 import com.vastutalks.app.data.model.CallRequestStatus
+import com.vastutalks.app.data.model.AnanyaAgent
+import com.vastutalks.app.data.model.CallPricing
+import com.vastutalks.app.data.model.Post
+import com.vastutalks.app.data.model.sortedForDirectory
 import com.vastutalks.app.data.model.CallType
 import com.vastutalks.app.data.model.ExpertProfile
 import com.vastutalks.app.data.model.UserRole
-import com.vastutalks.app.data.model.VastuPosts
 import com.vastutalks.app.data.model.expertDisplayExtrasFor
 import com.vastutalks.app.data.repository.CallSignalingRepository
 import com.vastutalks.app.ui.theme.Danger
@@ -95,6 +106,11 @@ fun HomeScreen(
     onAcceptIncomingCall: (channelName: String, callType: CallType, peerName: String) -> Unit = { _, _, _ -> },
     onExpertCardClick: (expertId: String, expertName: String) -> Unit = { _, _ -> },
     onCallAgent: () -> Unit = {},
+    onChatAgent: () -> Unit = {},
+    onCreatePost: () -> Unit = {},
+    onOpenPost: (postId: String) -> Unit = {},
+    onChatExpert: (expertId: String, expertName: String) -> Unit = { _, _ -> },
+    onOpenChats: () -> Unit = {},
     homeViewModel: HomeViewModel = viewModel()
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
@@ -102,10 +118,12 @@ fun HomeScreen(
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { /* no-op: if denied, incoming calls just won't post a system notification */ }
+    ) { /* no-op: if denied, calls and post activity just won't show a system notification (still in the app's list) */ }
 
+    // Everyone gets notifications now: experts for calls, likes and comments;
+    // users when an expert replies to their comment.
     LaunchedEffect(uiState.role) {
-        if (uiState.role == UserRole.VASTU_EXPERT &&
+        if (uiState.role != null &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -148,17 +166,51 @@ fun HomeScreen(
             }
 
             Box {
+                IconButton(onClick = onOpenChats) {
+                    Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = "Messages", tint = VastuPrimary)
+                }
+                if (uiState.unreadMessages > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-2).dp, y = 2.dp)
+                            .clip(CircleShape)
+                            .background(Danger),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (uiState.unreadMessages > 9) "9+" else "${uiState.unreadMessages}",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Box {
                 IconButton(onClick = onNotificationsClick) {
                     Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = VastuPrimary)
                 }
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-6).dp, y = 6.dp)
-                        .clip(CircleShape)
-                        .background(Danger)
-                )
+                if (uiState.unreadNotifications > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-2).dp, y = 2.dp)
+                            .clip(CircleShape)
+                            .background(Danger),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (uiState.unreadNotifications > 9) "9+" else "${uiState.unreadNotifications}",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
 
@@ -168,16 +220,36 @@ fun HomeScreen(
             }
             UserRole.VASTU_EXPERT -> ExpertDashboard(
                 incomingCall = uiState.incomingCall,
+                me = uiState.myExpertProfile,
+                pendingPhoto = uiState.pendingPhoto,
+                photoError = uiState.photoError,
+                onPhotoPicked = homeViewModel::updatePhoto,
+                onSaveDetails = homeViewModel::updateDetails,
+                myPosts = uiState.posts,
+                likedPostIds = uiState.likedPostIds,
+                onLike = homeViewModel::toggleLike,
+                onOpenPost = onOpenPost,
+                onCreatePost = onCreatePost,
+                onDeletePost = homeViewModel::deletePost,
+                isOnline = uiState.myExpertProfile?.isOnline ?: true,
+                onOnlineChange = homeViewModel::setOnline,
                 onAccepted = { channelName, callType, peerName -> onAcceptIncomingCall(channelName, callType, peerName) },
                 onDecline = { homeViewModel.declineIncomingCall() }
             )
             UserRole.NORMAL_USER -> NormalUserHome(
-                liveExperts = uiState.experts,
+                liveExperts = uiState.experts.sortedForDirectory(uiState.nowMillis),
+                now = uiState.nowMillis,
+                posts = uiState.posts,
+                likedPostIds = uiState.likedPostIds,
+                onLike = homeViewModel::toggleLike,
+                onOpenPost = onOpenPost,
                 expertsError = uiState.expertsError,
                 onSearchClick = onSearchClick,
                 onCallExpert = onCallExpert,
                 onExpertCardClick = onExpertCardClick,
-                onCallAgent = onCallAgent
+                onCallAgent = onCallAgent,
+                onChatAgent = onChatAgent,
+                onChatExpert = onChatExpert
             )
         }
     }
@@ -186,6 +258,19 @@ fun HomeScreen(
 @Composable
 private fun ExpertDashboard(
     incomingCall: CallRequest?,
+    me: ExpertProfile?,
+    pendingPhoto: android.graphics.Bitmap?,
+    photoError: String?,
+    onPhotoPicked: (android.graphics.Bitmap) -> Unit,
+    onSaveDetails: (city: String, experienceYears: Int, bio: String, onDone: (String?) -> Unit) -> Unit,
+    myPosts: List<Post>,
+    likedPostIds: Set<String>,
+    onLike: (String) -> Unit,
+    onOpenPost: (String) -> Unit,
+    onCreatePost: () -> Unit,
+    onDeletePost: (String) -> Unit,
+    isOnline: Boolean,
+    onOnlineChange: (Boolean) -> Unit,
     onAccepted: (channelName: String, callType: CallType, peerName: String) -> Unit,
     onDecline: () -> Unit
 ) {
@@ -209,7 +294,76 @@ private fun ExpertDashboard(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        // The expert as users see them; tap the photo to change it.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ProfilePhotoEditor(
+                photo = me?.photo.orEmpty(),
+                name = me?.name.orEmpty(),
+                size = 64.dp,
+                picked = pendingPhoto,
+                onPicked = onPhotoPicked
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(me?.name.orEmpty(), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(me?.displaySpecialty ?: "", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VastuPrimary)
+                Text(
+                    when {
+                        pendingPhoto != null -> "Saving your photo…"
+                        photoError != null -> photoError
+                        me?.photo.isNullOrBlank() -> "Tap the photo to add one — users see it when choosing an expert"
+                        else -> "Tap the photo to change it"
+                    },
+                    fontSize = 12.sp,
+                    color = if (photoError != null) Danger else TextSecondary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        if (me != null) {
+            Box(modifier = Modifier.height(8.dp))
+            ExpertDetailsCard(me, onSave = onSaveDetails)
+        }
+        Box(modifier = Modifier.height(12.dp))
+
+        // Availability switch: offline experts stay listed but can't be called.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White)
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(if (isOnline) OnlineGreen else TextSecondary))
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    if (isOnline) "You're online" else "You're offline",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2B2B2B)
+                )
+                Text(
+                    if (isOnline) "Users can call you for audio and video consultations" else "Users can see you but can't call you",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            }
+            Switch(
+                checked = isOnline,
+                onCheckedChange = onOnlineChange,
+                colors = SwitchDefaults.colors(checkedTrackColor = OnlineGreen)
+            )
+        }
+        Box(modifier = Modifier.height(16.dp))
+
         if (incomingCall != null) {
             Box(
                 modifier = Modifier
@@ -219,7 +373,11 @@ private fun ExpertDashboard(
                     .padding(20.dp)
             ) {
                 Column {
-                    Text("Incoming call", fontSize = 13.sp, color = TextSecondary)
+                    Text(
+                        if (incomingCall.callType == CallType.VIDEO.name) "Incoming video call" else "Incoming audio call",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
                     Text(incomingCall.callerName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))
                     if (acceptError != null) {
                         Box(modifier = Modifier.height(8.dp))
@@ -287,42 +445,60 @@ private fun ExpertDashboard(
             Box(modifier = Modifier.height(20.dp))
         }
 
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Outlined.SupportAgent,
-                    contentDescription = null,
-                    tint = VastuPrimary.copy(alpha = 0.4f),
-                    modifier = Modifier.size(56.dp)
-                )
-                Box(modifier = Modifier.height(16.dp))
-                Text(
-                    "You're listed as a Vastu Expert",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2B2B2B)
-                )
-                Box(modifier = Modifier.height(6.dp))
-                Text(
-                    "Normal users can find and call you. Keep the app open to receive calls in real time — incoming calls show up right here.",
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp)
+        // The expert's posts, shown in every user's Posts tab.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Your posts", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), modifier = Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(VastuPrimary)
+                    .clickable { onCreatePost() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Text(" New post", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+        Box(modifier = Modifier.height(12.dp))
+        if (myPosts.isEmpty()) {
+            Text(
+                "Share Vastu tips and updates — your posts appear in every user's Posts tab.",
+                fontSize = 13.sp,
+                color = TextSecondary,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            myPosts.forEach { post ->
+                PostCard(
+                    post,
+                    liked = post.id in likedPostIds,
+                    onLikeClick = { onLike(post.id) },
+                    onOpen = { onOpenPost(post.id) },
+                    onDelete = { onDeletePost(post.id) },
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
         }
+        Box(modifier = Modifier.height(20.dp))
     }
 }
 
 @Composable
 private fun NormalUserHome(
     liveExperts: List<ExpertProfile>,
+    now: Long,
+    posts: List<Post>,
+    likedPostIds: Set<String>,
+    onLike: (String) -> Unit,
+    onOpenPost: (String) -> Unit,
     expertsError: String?,
     onSearchClick: () -> Unit,
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit,
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
-    onCallAgent: () -> Unit
+    onCallAgent: () -> Unit,
+    onChatAgent: () -> Unit,
+    onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.EXPERTS) }
 
@@ -371,13 +547,52 @@ private fun NormalUserHome(
         Box(modifier = Modifier.height(16.dp))
 
         when (selectedTab) {
-            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, expertsError, onCallExpert, onExpertCardClick, onCallAgent)
-            HomeTab.POSTS -> PostsFeed(liveExperts.map { it.name })
+            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, now, expertsError, onCallExpert, onExpertCardClick, onCallAgent, onChatAgent, onChatExpert)
+            HomeTab.POSTS -> PostsFeed(
+                posts,
+                likedPostIds = likedPostIds,
+                onLike = onLike,
+                onOpenPost = onOpenPost,
+                onAuthorClick = { post -> onExpertCardClick(post.authorUid, post.authorName) }
+            )
         }
     }
 }
 
 private enum class HomeTab { EXPERTS, POSTS }
+
+@Composable
+private fun AgentCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(VastuPrimary.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
+            Text(subtitle, fontSize = 11.sp, color = TextSecondary)
+        }
+    }
+}
 
 @Composable
 private fun HomeTabChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -401,10 +616,13 @@ private fun HomeTabChip(label: String, selected: Boolean, modifier: Modifier = M
 @Composable
 private fun ExpertsTabContent(
     liveExperts: List<ExpertProfile>,
+    now: Long,
     expertsError: String?,
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit,
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
-    onCallAgent: () -> Unit
+    onCallAgent: () -> Unit,
+    onChatAgent: () -> Unit,
+    onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     Column {
         Box(
@@ -428,7 +646,7 @@ private fun ExpertsTabContent(
                 Box(modifier = Modifier.width(14.dp))
                 Column {
                     Text("Top Rated Consultants", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("${liveExperts.size} online now", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                    Text("${liveExperts.count { it.isPresentAt(now) }} online now", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
                 }
             }
         }
@@ -436,30 +654,22 @@ private fun ExpertsTabContent(
         Box(modifier = Modifier.height(12.dp))
 
         // Ananya, the AI Vastu agent — always available, no human
-        // expert needs to be online.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
-                .clickable { onCallAgent() }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(VastuPrimary.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Videocam, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
-            }
-            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text("Call Ananya — AI Vastu Expert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
-                Text("Talk, sketch or share photos and videos — available anytime", fontSize = 11.sp, color = TextSecondary)
-            }
+        // expert needs to be online. Only the chat is offered for now
+        // (AnanyaAgent.CALL_ENABLED).
+        AgentCard(
+            icon = Icons.AutoMirrored.Outlined.Chat,
+            title = "Ananya से चैट करें — AI वास्तु विशेषज्ञ",
+            subtitle = "हिंदी में सवाल पूछें या कमरे की फ़ोटो भेजें — सुझाव फ़ोटो पर निशान लगाकर",
+            onClick = onChatAgent
+        )
+        if (AnanyaAgent.CALL_ENABLED) {
+            Box(modifier = Modifier.height(10.dp))
+            AgentCard(
+                icon = Icons.Filled.Videocam,
+                title = "Call Ananya — AI Vastu Expert",
+                subtitle = "Talk, sketch or share photos and videos — available anytime",
+                onClick = onCallAgent
+            )
         }
 
         Box(modifier = Modifier.height(20.dp))
@@ -480,7 +690,7 @@ private fun ExpertsTabContent(
             } else if (liveExperts.isEmpty()) {
                 item {
                     Text(
-                        "No experts online right now — check back soon.",
+                        "No experts have joined yet — check back soon.",
                         fontSize = 13.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(vertical = 4.dp)
@@ -490,7 +700,10 @@ private fun ExpertsTabContent(
                 items(liveExperts) { expert ->
                     LiveExpertCard(
                         expert = expert,
-                        onCardClick = { onExpertCardClick(expert.uid, expert.name) }
+                        now = now,
+                        onCardClick = { onExpertCardClick(expert.uid, expert.name) },
+                        onCall = { type -> onCallExpert(expert.uid, expert.name, type) },
+                        onChat = { onChatExpert(expert.uid, expert.name) }
                     )
                 }
             }
@@ -498,94 +711,38 @@ private fun ExpertsTabContent(
     }
 }
 
+/** Every expert's posts, newest first; tapping an author opens their profile. */
 @Composable
-private fun PostsFeed(expertNames: List<String>) {
-    // Recomputed only when the set of expert names actually changes,
-    // not on every recomposition — otherwise authors/likes/timestamps
-    // would visibly reshuffle while scrolling.
-    val posts = remember(expertNames) {
-        val authorPool = expertNames.ifEmpty { listOf("Vastu Talks Expert") }
-        val random = kotlin.random.Random(seed = expertNames.hashCode().toLong())
-        VastuPosts.texts.map { text ->
-            GeneratedPost(
-                authorName = authorPool[random.nextInt(authorPool.size)],
-                text = text,
-                likeCount = random.nextInt(4, 240),
-                timeAgo = listOf("1h ago", "3h ago", "5h ago", "Yesterday", "2d ago", "3d ago", "1w ago").random(random),
-                // Matched to keywords in the post text (compass/directions,
-                // fire/kitchen, water, plants, mirrors, etc.) rather than a
-                // stock photo — see VastuIllustrations.kt for the actual
-                // hand-drawn, animated Compose Canvas art.
-                illustrationType = illustrationTypeFor(text)
+private fun PostsFeed(
+    posts: List<Post>,
+    likedPostIds: Set<String>,
+    onLike: (String) -> Unit,
+    onOpenPost: (String) -> Unit,
+    onAuthorClick: (Post) -> Unit
+) {
+    if (posts.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+            Text(
+                "No posts yet. Tips and updates from Vastu experts will show up here.",
+                fontSize = 14.sp,
+                color = TextSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
+        return
     }
-
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(posts) { post ->
-            PostCard(post)
-        }
-    }
-}
-
-private data class GeneratedPost(
-    val authorName: String,
-    val text: String,
-    val likeCount: Int,
-    val timeAgo: String,
-    val illustrationType: VastuIllustrationType
-)
-
-@Composable
-private fun PostCard(post: GeneratedPost) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-    ) {
-        Column {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(VastuPrimary.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = post.authorName.split(" ").mapNotNull { it.firstOrNull() }.take(2).joinToString(""),
-                        color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp
-                    )
-                }
-                Box(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(post.authorName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2B2B2B))
-                    Text(post.timeAgo, fontSize = 11.sp, color = TextSecondary)
-                }
-            }
-
-            VastuIllustration(
-                type = post.illustrationType,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
+        items(posts, key = { it.id }) { post ->
+            PostCard(
+                post,
+                liked = post.id in likedPostIds,
+                onLikeClick = { onLike(post.id) },
+                onOpen = { onOpenPost(post.id) },
+                onAuthorClick = { onAuthorClick(post) }
             )
-
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(post.text, fontSize = 13.sp, color = Color(0xFF2B2B2B), lineHeight = 19.sp)
-                Box(modifier = Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Favorite, contentDescription = null, tint = Danger, modifier = Modifier.size(14.dp))
-                    Text(" ${post.likeCount}", fontSize = 12.sp, color = TextSecondary)
-                }
-            }
         }
     }
 }
@@ -593,9 +750,12 @@ private fun PostCard(post: GeneratedPost) {
 @Composable
 private fun LiveExpertCard(
     expert: ExpertProfile,
-    onCardClick: () -> Unit
+    now: Long,
+    onCardClick: () -> Unit,
+    onCall: (CallType) -> Unit,
+    onChat: () -> Unit
 ) {
-    val extras = remember(expert.uid) { expertDisplayExtrasFor(expert.uid) }
+    val extras = remember(expert.uid) { expertDisplayExtrasFor(expert.uid) } // only for the hidden price
 
     Box(
         modifier = Modifier
@@ -608,18 +768,7 @@ private fun LiveExpertCard(
         Column {
             Row(verticalAlignment = Alignment.Top) {
                 Box {
-                    // Real per-expert photos aren't collected at signup yet —
-                    // Pravatar serves free, realistic-looking placeholder
-                    // headshots (not actual people, no copyright concern),
-                    // seeded per-expert so the same one always shows.
-                    AsyncImage(
-                        model = "https://i.pravatar.cc/300?u=${extras.avatarSeed}-${expert.uid}",
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(VastuPrimary.copy(alpha = 0.08f))
-                    )
+                    ProfileAvatar(expert.photo, expert.name, size = 64.dp, shape = RoundedCornerShape(16.dp))
                     Box(
                         modifier = Modifier
                             .size(16.dp)
@@ -629,7 +778,7 @@ private fun LiveExpertCard(
                             .background(Color.White)
                             .padding(2.dp)
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(OnlineGreen))
+                        Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(expertStatusColor(expert, now)))
                     }
                 }
 
@@ -637,23 +786,13 @@ private fun LiveExpertCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(expert.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color(0xFF2B2B2B), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(extras.specialty, color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Box(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        InfoPill(icon = Icons.Filled.WorkspacePremium, text = "${extras.experienceYears} yrs")
-                        InfoPill(icon = Icons.Filled.LocationOn, text = extras.location, tint = Danger)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(WalletGold)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Star, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                        Text(" ${extras.rating}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(expert.displaySpecialty, color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    if (expert.experienceYears > 0 || expert.city.isNotBlank()) {
+                        Box(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (expert.experienceYears > 0) InfoPill(icon = Icons.Filled.WorkspacePremium, text = "${expert.experienceYears} yrs")
+                            if (expert.city.isNotBlank()) InfoPill(icon = Icons.Filled.LocationOn, text = expert.city, tint = Danger)
+                        }
                     }
                 }
             }
@@ -663,11 +802,165 @@ private fun LiveExpertCard(
             Box(modifier = Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${extras.reviewCount} reviews", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.weight(1f))
-                Text("₹${extras.pricePerSession}", color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text("/session", color = TextSecondary, fontSize = 12.sp)
+                Text(expertStatusLabel(expert, now), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = expertStatusColor(expert, now))
+                Text(
+                    "  ·  " + if (CallPricing.PAID_CALLS) "₹${extras.pricePerSession}/session" else "${expert.consultationsLabel} · Free",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(modifier = Modifier.height(10.dp))
+            // The three ways to reach an expert. Chat works even when they're offline.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CallChip(Icons.AutoMirrored.Outlined.Chat, "Chat", enabled = true, modifier = Modifier.weight(1f), onClick = onChat)
+                CallChip(Icons.Filled.Call, "Audio", enabled = expert.isAvailableAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.AUDIO) }
+                CallChip(Icons.Filled.Videocam, "Video", enabled = expert.isAvailableAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.VIDEO) }
             }
         }
+    }
+}
+
+/**
+ * What users see on the expert's card and profile — city, experience and
+ * About — with an Edit button that opens [EditExpertDetailsDialog].
+ */
+@Composable
+private fun ExpertDetailsCard(
+    me: ExpertProfile,
+    onSave: (city: String, experienceYears: Int, bio: String, onDone: (String?) -> Unit) -> Unit
+) {
+    var editing by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                InfoPill(icon = Icons.Filled.WorkspacePremium, text = if (me.experienceYears > 0) "${me.experienceYears} yrs" else "Experience not set")
+                InfoPill(icon = Icons.Filled.LocationOn, text = me.city.ifBlank { "City not set" }, tint = Danger)
+            }
+            Text(
+                "Edit",
+                color = VastuPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { editing = true }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+        Text(
+            me.bio.ifBlank { "Add a short introduction so users know how you can help." },
+            fontSize = 13.sp,
+            color = TextSecondary,
+            lineHeight = 19.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+    }
+    if (editing) {
+        EditExpertDetailsDialog(me, onDismiss = { editing = false }, onSave = onSave)
+    }
+}
+
+@Composable
+private fun EditExpertDetailsDialog(
+    me: ExpertProfile,
+    onDismiss: () -> Unit,
+    onSave: (city: String, experienceYears: Int, bio: String, onDone: (String?) -> Unit) -> Unit
+) {
+    var city by remember { mutableStateOf(me.city) }
+    var experience by remember { mutableStateOf(if (me.experienceYears > 0) me.experienceYears.toString() else "") }
+    var bio by remember { mutableStateOf(me.bio) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val canSave = city.isNotBlank() && experience.toIntOrNull() != null && bio.isNotBlank() && !saving
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        containerColor = Color.White,
+        title = { Text("Edit your details", fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("City", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), modifier = Modifier.padding(bottom = 6.dp))
+                VastuTextField(value = city, onValueChange = { city = it }, placeholder = "e.g. Mumbai", leadingIcon = Icons.Filled.LocationOn)
+                Text("Years of Experience", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+                VastuTextField(
+                    value = experience,
+                    onValueChange = { experience = it.filter(Char::isDigit).take(2) },
+                    placeholder = "e.g. 10",
+                    leadingIcon = Icons.Filled.WorkspacePremium,
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                )
+                Text("About You", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+                VastuTextField(
+                    value = bio,
+                    onValueChange = { bio = it.take(400) },
+                    placeholder = "Your experience, approach and what you help clients with",
+                    leadingIcon = Icons.Filled.Info,
+                    minLines = 4
+                )
+                error?.let { Text(it, color = Danger, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSave,
+                onClick = {
+                    saving = true
+                    error = null
+                    onSave(city, experience.toInt(), bio) { failure ->
+                        saving = false
+                        if (failure == null) onDismiss() else error = failure
+                    }
+                }
+            ) { Text(if (saving) "Saving…" else "Save", color = if (canSave) VastuPrimary else TextSecondary, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel", color = TextSecondary) }
+        }
+    )
+}
+
+internal fun expertStatusLabel(expert: ExpertProfile, now: Long): String = when {
+    !expert.isPresentAt(now) -> "Offline"
+    expert.isBusyAt(now) -> "On another call"
+    else -> "Online now"
+}
+
+internal fun expertStatusColor(expert: ExpertProfile, now: Long): Color = when {
+    !expert.isPresentAt(now) -> TextSecondary
+    expert.isBusyAt(now) -> WalletGold
+    else -> OnlineGreen
+}
+
+/** "Chat" / "Audio" / "Video" button on an expert card; greyed out when they can't be reached that way. */
+@Composable
+private fun CallChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (enabled) VastuPrimary else SurfaceLight)
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 8.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = if (enabled) Color.White else TextSecondary, modifier = Modifier.size(15.dp))
+        Text(" $label", color = if (enabled) Color.White else TextSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
     }
 }
 

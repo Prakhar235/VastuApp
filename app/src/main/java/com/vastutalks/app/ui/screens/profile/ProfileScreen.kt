@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vastutalks.app.data.model.CallHistoryEntry
+import com.vastutalks.app.ui.components.ProfilePhotoEditor
+import com.vastutalks.app.data.model.CallPricing
 import com.vastutalks.app.data.model.CallType
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.SurfaceLight
@@ -103,43 +105,36 @@ fun ProfileScreen(
             // Firebase credential data — name, email, avatar.
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(VastuPrimary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.Person, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(32.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .align(Alignment.BottomEnd)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                                // Not wired yet — no photo-upload flow exists.
-                                .clickable { },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = VastuPrimary, modifier = Modifier.size(14.dp))
-                        }
-                    }
+                    ProfilePhotoEditor(
+                        photo = uiState.profile?.photo.orEmpty(),
+                        name = displayName,
+                        size = 64.dp,
+                        picked = uiState.pendingPhoto,
+                        onPicked = profileViewModel::updatePhoto,
+                        shape = RoundedCornerShape(18.dp)
+                    )
                     Box(modifier = Modifier.padding(start = 14.dp)) {
                         Column {
                             Text(displayName, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))
                             Text(email, fontSize = 13.sp, color = TextSecondary)
-                            // Not wired yet — no dedicated edit-profile screen exists.
-                            Text("Edit Profile", fontSize = 13.sp, color = VastuPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { })
+                            uiState.profile?.phone?.takeIf { it.isNotBlank() }?.let {
+                                Text(it, fontSize = 13.sp, color = TextSecondary)
+                            }
+                            Text(
+                                if (uiState.pendingPhoto != null) "Saving photo…" else "Tap the photo to change it",
+                                fontSize = 12.sp,
+                                color = VastuPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
             }
 
             // Available Credits — simulated wallet, matching Home/in-call's
-            // hardcoded per-expert rate. No real credits/ledger backend yet.
-            item {
+            // hardcoded per-expert rate. No real credits/ledger backend yet,
+            // and hidden while calls are free.
+            if (CallPricing.PAID_CALLS) item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -385,7 +380,7 @@ private fun CallHistoryRow(entry: CallHistoryEntry) {
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF2B2B2B)
                 )
-                Text("₹${entry.cost}", fontSize = 12.sp, color = TextSecondary)
+                if (CallPricing.PAID_CALLS) Text("₹${entry.cost}", fontSize = 12.sp, color = TextSecondary)
             }
         }
     }

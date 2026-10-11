@@ -14,6 +14,11 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_DEEP_LINK_CHANNEL = "deep_link_channel"
         const val EXTRA_DEEP_LINK_PEER_NAME = "deep_link_peer_name"
         const val EXTRA_DEEP_LINK_CALL_TYPE = "deep_link_call_type"
+        /** Set by a like/comment notification: open this post after Splash. */
+        const val EXTRA_OPEN_POST_ID = "open_post_id"
+        /** Set by a chat notification: open the chat with this person after Splash. */
+        const val EXTRA_OPEN_CHAT_UID = "open_chat_uid"
+        const val EXTRA_OPEN_CHAT_NAME = "open_chat_name"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,7 +46,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             VastuTalksTheme {
-                VastuNavGraph(initialCallDeepLink = deepLink)
+                VastuNavGraph(
+                    initialCallDeepLink = deepLink,
+                    initialPostId = intent.getStringExtra(EXTRA_OPEN_POST_ID),
+                    initialChat = intent.getStringExtra(EXTRA_OPEN_CHAT_UID)?.let { it to intent.getStringExtra(EXTRA_OPEN_CHAT_NAME).orEmpty() }
+                )
             }
         }
     }

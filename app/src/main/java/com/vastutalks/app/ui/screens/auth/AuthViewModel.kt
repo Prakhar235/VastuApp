@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
 import com.vastutalks.app.data.model.UserRole
 import com.vastutalks.app.data.repository.AuthRepository
+import com.vastutalks.app.data.repository.ExpertDetails
+import com.vastutalks.app.data.repository.ProfilePhotos
 import com.vastutalks.app.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 
 data class AuthUiState(
@@ -55,7 +59,16 @@ class AuthViewModel(
         }
     }
 
-    fun signUp(fullName: String, email: String, password: String, role: UserRole, onSuccess: () -> Unit) {
+    fun signUp(
+        fullName: String,
+        email: String,
+        password: String,
+        role: UserRole,
+        phone: String,
+        photo: android.graphics.Bitmap?,
+        expert: ExpertDetails?,
+        onSuccess: () -> Unit
+    ) {
         _uiState.value = AuthUiState(isLoading = true)
         viewModelScope.launch {
             val authResult = authRepository.signUp(email, password, fullName)
@@ -68,7 +81,10 @@ class AuthViewModel(
             // The Firebase Auth account exists even if this profile write
             // fails, so don't block the user on it — just surface a message
             // if it happens. Worst case they land on Home with a default role.
-            val profileResult = userRepository.createProfileForNewUser(user.uid, fullName, email, role)
+            val encodedPhoto = photo?.let { withContext(Dispatchers.Default) { ProfilePhotos.encode(it) } }.orEmpty()
+            val profileResult = userRepository.createProfileForNewUser(
+                user.uid, fullName.trim(), email.trim(), role, phone.trim(), encodedPhoto, expert
+            )
             _uiState.value = AuthUiState(
                 isLoading = false,
                 errorMessage = profileResult.exceptionOrNull()?.let {

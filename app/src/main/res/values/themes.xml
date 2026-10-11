@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.VastuTalks" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- The app is designed light-only (see VastuTalksTheme). Without this, phones in
+             dark mode (e.g. Samsung) "force dark" it and repaint parts of the UI, which
+             turned the violet sign-up button white. API 29+; ignored below. -->
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 </resources>

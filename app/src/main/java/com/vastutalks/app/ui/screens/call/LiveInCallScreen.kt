@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.vastutalks.app.data.call.AgoraCallManager
+import com.vastutalks.app.data.model.CallPricing
+import com.vastutalks.app.data.model.ExpertProfile
+import com.vastutalks.app.ui.components.ProfileAvatar
 import com.vastutalks.app.data.model.CallType
 import com.vastutalks.app.data.model.expertDisplayExtrasFor
 import com.vastutalks.app.ui.components.DrawingCanvasOverlay
@@ -53,7 +56,14 @@ import com.vastutalks.app.ui.components.RemoteVideoView
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.VastuPrimary
 import com.vastutalks.app.ui.theme.VastuPrimaryDark
+import com.vastutalks.app.data.repository.UserRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+/** How long to wait for the other person to come back after they drop before ending the call. */
+private const val REMOTE_GONE_GRACE_MILLIS = 8_000L
 
 /**
  * In-call UI for the real signaling flow (LiveCallingScreen /
@@ -71,6 +81,7 @@ fun LiveInCallScreen(
     callType: CallType,
     onEndCall: (durationSeconds: Int, startTimeMillis: Long) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val expertUid = remember(channelName) { channelName.removePrefix("expert-") }
     val extras = remember(expertUid) { expertDisplayExtrasFor(expertUid) }
     val ratePerMinute = extras.pricePerSession / 60.0
@@ -84,6 +95,15 @@ fun LiveInCallScreen(
     }
     var showDrawingCanvas by remember { mutableStateOf(false) }
 
+    // The user sees the expert's real photo and specialty; the expert sees
+    // the caller's initials (users' profiles are private to them).
+    var expert by remember { mutableStateOf<ExpertProfile?>(null) }
+    LaunchedEffect(expertUid) {
+        if (!isExpertOnThisDevice) expert = UserRepository().getExpert(expertUid).getOrNull()
+    }
+    val peerPhoto = if (isExpertOnThisDevice) "" else expert?.photo.orEmpty()
+    val peerSubtitle = if (isExpertOnThisDevice) "Client" else expert?.displaySpecialty ?: "Vastu Expert"
+
     var elapsedSeconds by remember { mutableStateOf(0) }
     val startTimeMillis = remember { System.currentTimeMillis() }
     var isMuted by remember { mutableStateOf(false) }
@@ -92,8 +112,27 @@ fun LiveInCallScreen(
 
     val remoteUid by AgoraCallManager.remoteUid.collectAsState()
 
+    // The expert shows as "on a call" to everyone else until this screen closes.
+    // Cleared from a scope that outlives the screen, so it isn't cancelled on the way out.
     DisposableEffect(Unit) {
-        onDispose { AgoraCallManager.leaveAndRelease() }
+        if (isExpertOnThisDevice) CoroutineScope(Dispatchers.IO).launch { UserRepository().setInCall(true) }
+        onDispose {
+            AgoraCallManager.leaveAndRelease()
+            if (isExpertOnThisDevice) CoroutineScope(Dispatchers.IO).launch { UserRepository().setInCall(false) }
+        }
+    }
+
+    // When the other person hangs up (or drops and doesn't come back within a
+    // few seconds), end the call here too instead of sitting in an empty call.
+    var remoteJoined by remember { mutableStateOf(false) }
+    LaunchedEffect(remoteUid) {
+        if (remoteUid != null) {
+            remoteJoined = true
+        } else if (remoteJoined) {
+            delay(REMOTE_GONE_GRACE_MILLIS)
+            android.widget.Toast.makeText(context, "$peerName left the call", android.widget.Toast.LENGTH_SHORT).show()
+            onEndCall(elapsedSeconds, startTimeMillis)
+        }
     }
 
     LaunchedEffect(isSpeakerOn) { AgoraCallManager.setSpeakerphoneEnabled(isSpeakerOn) }
@@ -132,9 +171,11 @@ fun LiveInCallScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TopPill(text = timerLabel)
-                TopPill(text = "Cost: ₹%.2f".format(cost))
-                Box(modifier = Modifier.weight(1f))
-                TopPill(text = "₹%.2f".format(remainingBalance))
+                if (CallPricing.PAID_CALLS) {
+                    TopPill(text = "Cost: ₹%.2f".format(cost))
+                    Box(modifier = Modifier.weight(1f))
+                    TopPill(text = "₹%.2f".format(remainingBalance))
+                }
             }
 
             if (!showRealRemoteVideo) {
@@ -147,14 +188,7 @@ fun LiveInCallScreen(
                                 .background(Color.White.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            AsyncImage(
-                                model = "https://i.pravatar.cc/300?u=${extras.avatarSeed}-$expertUid",
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(124.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                            )
+                            ProfileAvatar(peerPhoto, peerName, size = 124.dp)
                         }
                         Box(modifier = Modifier.size(16.dp))
                         if (callType == CallType.VIDEO && remoteUid == null) {
@@ -173,7 +207,7 @@ fun LiveInCallScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(peerName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(extras.specialty, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                Text(peerSubtitle, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                             }
                         }
                     }
@@ -279,8 +313,8 @@ fun LiveInCallScreen(
             DrawingCanvasOverlay(
                 timerLabel = timerLabel,
                 peerName = peerName,
-                peerSpecialty = extras.specialty,
-                avatarUrl = "https://i.pravatar.cc/300?u=${extras.avatarSeed}-$expertUid",
+                peerSpecialty = peerSubtitle,
+                avatarUrl = "",
                 onClose = { showDrawingCanvas = false }
             )
         }

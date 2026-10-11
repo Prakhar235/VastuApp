@@ -5,6 +5,9 @@ data class UserProfile(
     val uid: String = "",
     val name: String = "",
     val email: String = "",
+    val phone: String = "",
+    /** Profile photo as a small base64 JPEG (see ProfilePhotos); blank if none. */
+    val photo: String = "",
     val role: String = UserRole.NORMAL_USER.name,
     val createdAtMillis: Long = 0L,
     /** Set by VastuMessagingService.onNewToken; used by the Cloud Function to actually ring this device. */

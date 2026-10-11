@@ -12,12 +12,51 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Posts each user has liked. The post's likeCount and the author's
+    // notification come from Cloud Functions (onPostLiked / onPostUnliked).
+    match /users/{userId}/likes/{postId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Written only by Cloud Functions; the user can read them and mark them read.
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"]);
+    }
+
     // The live expert directory. Any signed-in user can read it (that's
     // what powers the "Live experts" list on Home); only the expert
-    // themself can create/update their own entry.
+    // themself can create/update their own entry, and only accounts that
+    // signed up as a Vastu Expert can create one.
     match /experts/{expertUid} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == expertUid;
+      allow create: if request.auth != null && request.auth.uid == expertUid &&
+        get(/databases/$(database)/documents/users/$(expertUid)).data.role == "VASTU_EXPERT";
+      allow update, delete: if request.auth != null && request.auth.uid == expertUid;
+    }
+
+    // Posts by Vastu experts, shown in every user's Posts tab. Any
+    // signed-in user can read them; only experts can post, only as
+    // themselves; only the author can delete a post.
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.data.authorUid == request.auth.uid &&
+        exists(/databases/$(database)/documents/experts/$(request.auth.uid));
+      allow delete: if request.auth != null && resource.data.authorUid == request.auth.uid;
+
+      // Questions and replies on a post, from any signed-in user, as
+      // themselves. Deletable by the commenter, or by the post's author.
+      // commentCount and notifications come from Cloud Functions.
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
+        allow delete: if request.auth != null && (
+          resource.data.authorUid == request.auth.uid ||
+          get(/databases/$(database)/documents/posts/$(postId)).data.authorUid == request.auth.uid
+        );
+      }
     }
 
     // Cached Agora tokens, keyed by expert (see TokenRepository.fetchOrCreateExpertToken).
@@ -29,6 +68,25 @@ service cloud.firestore {
     // place that ever sees the App Certificate.
     match /expertTokens/{expertUid} {
       allow read, write: if request.auth != null;
+    }
+
+    // One-to-one chats. A chat's id is its two participants' uids, sorted
+    // and joined with "_", so who may use it follows from the id itself —
+    // which also works before the chat exists (the first message). Listing
+    // your chats uses array-contains on participants, which these rules can
+    // check. Unread counts are kept by the onChatMessageCreated function.
+    match /chats/{chatId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.participants;
+      allow create, update: if request.auth != null &&
+        request.auth.uid in chatId.split("_") &&
+        request.resource.data.participants == chatId.split("_");
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null && request.auth.uid in chatId.split("_");
+        allow create: if request.auth != null &&
+          request.auth.uid in chatId.split("_") &&
+          request.resource.data.senderUid == request.auth.uid;
+      }
     }
 
     // Real-time call signaling. Only the two participants in a call can

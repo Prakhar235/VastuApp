@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -32,12 +33,14 @@ fun VastuTextField(
     isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     passwordVisible: Boolean = false,
-    onTogglePasswordVisibility: (() -> Unit)? = null
+    onTogglePasswordVisibility: (() -> Unit)? = null,
+    /** Above 1, the field grows to fit (for longer text like a bio) instead of a single line. */
+    minLines: Int = 1
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth().height(56.dp),
+        modifier = if (minLines > 1) modifier.fillMaxWidth() else modifier.fillMaxWidth().height(56.dp),
         placeholder = { Text(placeholder, color = TextHint) },
         leadingIcon = {
             Icon(leadingIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -55,9 +58,13 @@ fun VastuTextField(
         },
         visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
-        singleLine = true,
+        singleLine = minLines <= 1,
+        minLines = minLines,
         shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
+            // Explicit, so the text stays readable whatever the phone's theme.
+            focusedTextColor = Color(0xFF2B2B2B),
+            unfocusedTextColor = Color(0xFF2B2B2B),
             unfocusedContainerColor = InputFill,
             focusedContainerColor = InputFill,
             unfocusedBorderColor = InputFill,

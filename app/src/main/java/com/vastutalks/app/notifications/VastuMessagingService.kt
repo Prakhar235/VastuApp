@@ -11,6 +11,10 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.vastutalks.app.INCOMING_CALL_CHANNEL_ID
+import com.vastutalks.app.MESSAGES_CHANNEL_ID
+import com.vastutalks.app.MainActivity
+import com.vastutalks.app.data.repository.ChatRepository
+import com.vastutalks.app.POST_ACTIVITY_CHANNEL_ID
 import com.vastutalks.app.R
 import com.vastutalks.app.call.IncomingCallActivity
 import com.vastutalks.app.data.repository.UserRepository
@@ -47,6 +51,17 @@ class VastuMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val data = message.data
+        if (data["type"] == "chat") {
+            val chatId = data["chatId"] ?: return
+            // Already reading this chat: the message is on screen.
+            if (ChatRepository.openChatId == chatId) return
+            showChatNotification(chatId, data["senderUid"] ?: return, data["senderName"].orEmpty(), data["body"].orEmpty())
+            return
+        }
+        if (data["type"] == "post_activity") {
+            showPostActivityNotification(data["postId"] ?: return, data["title"].orEmpty(), data["body"].orEmpty())
+            return
+        }
         if (data["type"] != "incoming_call") return
 
         val callId = data["callId"] ?: return
@@ -55,6 +70,67 @@ class VastuMessagingService : FirebaseMessagingService() {
         val callType = data["callType"] ?: "AUDIO"
 
         showIncomingCallNotification(callId, callerName, channelName, callType)
+    }
+
+    /** A chat message (sent by onChatMessageCreated in /functions); tapping it opens the chat. */
+    private fun showChatNotification(chatId: String, senderUid: String, senderName: String, body: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return // the unread badge in the app still shows it
+        }
+        val open = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra(MainActivity.EXTRA_OPEN_CHAT_UID, senderUid)
+            putExtra(MainActivity.EXTRA_OPEN_CHAT_NAME, senderName)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            chatId.hashCode(),
+            open,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        val notification = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(senderName)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        // One per chat: a newer message replaces the older one.
+        NotificationManagerCompat.from(this).notify("chat:$chatId".hashCode(), notification)
+    }
+
+    /** A like, comment or reply (sent by the Cloud Functions in /functions); tapping it opens the post. */
+    private fun showPostActivityNotification(postId: String, title: String, body: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return // still listed in the app's notifications screen
+        }
+        val open = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra(MainActivity.EXTRA_OPEN_POST_ID, postId)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            postId.hashCode(),
+            open,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        val notification = NotificationCompat.Builder(this, POST_ACTIVITY_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        // One per post, so a burst of likes updates a single notification.
+        NotificationManagerCompat.from(this).notify("post:$postId".hashCode(), notification)
     }
 
     private fun showIncomingCallNotification(callId: String, callerName: String, channelName: String, callType: String) {

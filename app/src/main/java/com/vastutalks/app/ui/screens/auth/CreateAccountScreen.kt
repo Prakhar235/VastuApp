@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -44,7 +48,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vastutalks.app.data.model.UserRole
+import com.vastutalks.app.data.repository.ExpertDetails
 import com.vastutalks.app.ui.components.GradientButton
+import com.vastutalks.app.ui.components.ProfilePhotoEditor
 import com.vastutalks.app.ui.components.VastuTextField
 import com.vastutalks.app.ui.theme.AuthGradient
 import com.vastutalks.app.ui.theme.VastuPrimary
@@ -66,6 +72,12 @@ fun CreateAccountScreen(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var agreedToTerms by remember { mutableStateOf(false) }
     var selectedRole by remember { mutableStateOf(UserRole.NORMAL_USER) }
+    var photo by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    // Expert-only: the details shown on their card and profile.
+    var specialty by remember { mutableStateOf("") }
+    var experience by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
 
     val uiState by authViewModel.uiState.collectAsState()
 
@@ -77,8 +89,24 @@ fun CreateAccountScreen(
         }
     }
 
-    val canSubmit = fullName.isNotBlank() && email.isNotBlank() && mobile.isNotBlank() &&
-        password.isNotBlank() && password == confirmPassword && agreedToTerms
+    val isExpert = selectedRole == UserRole.VASTU_EXPERT
+    // Everything still missing, so the user knows why the button is disabled.
+    val missing = buildList {
+        if (isExpert && photo == null) add("profile photo")
+        if (fullName.isBlank()) add("name")
+        if (!email.contains('@')) add("email")
+        if (mobile.filter(Char::isDigit).length < 10) add("10-digit mobile number")
+        if (isExpert) {
+            if (specialty.isBlank()) add("specialty")
+            if (experience.toIntOrNull() == null) add("years of experience")
+            if (city.isBlank()) add("city")
+            if (bio.isBlank()) add("about you")
+        }
+        if (password.length < 6) add("password (6+ characters)")
+        else if (password != confirmPassword) add("matching passwords")
+        if (!agreedToTerms) add("agree to the Terms")
+    }
+    val canSubmit = missing.isEmpty()
 
     Box(
         modifier = Modifier
@@ -154,6 +182,29 @@ fun CreateAccountScreen(
                         )
                     }
 
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ProfilePhotoEditor(
+                            photo = "",
+                            name = fullName,
+                            size = 96.dp,
+                            picked = photo,
+                            onPicked = { photo = it }
+                        )
+                        Text(
+                            when {
+                                photo != null -> "Tap to change photo"
+                                isExpert -> "Add your profile photo (required)"
+                                else -> "Add a profile photo (optional)"
+                            },
+                            fontSize = 12.sp,
+                            color = if (photo == null && isExpert) VastuPrimary else Color(0xFF6B6878),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+
                     FieldLabel("Full Name", topPadding = 16.dp)
                     VastuTextField(
                         value = fullName,
@@ -179,6 +230,55 @@ fun CreateAccountScreen(
                         leadingIcon = Icons.Filled.Phone,
                         keyboardType = KeyboardType.Phone
                     )
+
+                    if (isExpert) {
+                        FieldLabel("Specialty", topPadding = 16.dp)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            EXPERT_SPECIALTIES.forEach { option ->
+                                val selected = specialty == option
+                                Text(
+                                    option,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selected) Color.White else Color(0xFF6B6878),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(if (selected) VastuPrimary else Color(0xFFF3F1F7))
+                                        .clickable { specialty = option }
+                                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                                )
+                            }
+                        }
+
+                        FieldLabel("Years of Experience", topPadding = 16.dp)
+                        VastuTextField(
+                            value = experience,
+                            onValueChange = { experience = it.filter(Char::isDigit).take(2) },
+                            placeholder = "e.g. 10",
+                            leadingIcon = Icons.Filled.WorkspacePremium,
+                            keyboardType = KeyboardType.Number
+                        )
+
+                        FieldLabel("City", topPadding = 16.dp)
+                        VastuTextField(
+                            value = city,
+                            onValueChange = { city = it },
+                            placeholder = "e.g. Mumbai",
+                            leadingIcon = Icons.Filled.LocationOn
+                        )
+
+                        FieldLabel("About You", topPadding = 16.dp)
+                        VastuTextField(
+                            value = bio,
+                            onValueChange = { bio = it.take(400) },
+                            placeholder = "Your experience, approach and what you help clients with",
+                            leadingIcon = Icons.Filled.Info,
+                            minLines = 3
+                        )
+                    }
 
                     FieldLabel("Password", topPadding = 16.dp)
                     VastuTextField(
@@ -248,9 +348,26 @@ fun CreateAccountScreen(
                         isLoading = uiState.isLoading,
                         onClick = {
                             errorText = null
-                            authViewModel.signUp(fullName, email, password, selectedRole, onSuccess = onAccountCreated)
+                            authViewModel.signUp(
+                                fullName = fullName,
+                                email = email,
+                                password = password,
+                                role = selectedRole,
+                                phone = mobile,
+                                photo = photo,
+                                expert = if (isExpert) ExpertDetails(specialty, experience.toInt(), city.trim(), bio.trim()) else null,
+                                onSuccess = onAccountCreated
+                            )
                         }
                     )
+                    if (!canSubmit) {
+                        Text(
+                            "Still needed: " + missing.joinToString(", "),
+                            fontSize = 12.sp,
+                            color = Color(0xFF6B6878),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
 
                     Box(modifier = Modifier.height(24.dp))
                 }
@@ -258,6 +375,16 @@ fun CreateAccountScreen(
         }
     }
 }
+
+/** The specialties an expert can pick at sign-up (shown on their card and profile). */
+private val EXPERT_SPECIALTIES = listOf(
+    "Residential Vastu",
+    "Commercial Vastu",
+    "Industrial Vastu",
+    "Interior Vastu",
+    "Plot & Land Vastu",
+    "Spiritual Consultation"
+)
 
 @Composable
 private fun RoleTab(

@@ -21,6 +21,7 @@ import com.vastutalks.app.ui.screens.auth.SignInScreen
 import com.vastutalks.app.ui.screens.call.AgentCallingScreen
 import com.vastutalks.app.ui.screens.call.AgentInCallScreen
 import com.vastutalks.app.ui.screens.call.LiveCallingScreen
+import com.vastutalks.app.ui.screens.chat.AgentChatScreen
 import com.vastutalks.app.ui.screens.call.LiveInCallScreen
 import com.vastutalks.app.ui.screens.home.HomeScreen
 import com.vastutalks.app.ui.screens.profile.ProfileScreen
@@ -32,7 +33,12 @@ import java.net.URLDecoder
 data class CallDeepLink(val channelName: String, val peerName: String, val callType: String)
 
 @Composable
-fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
+fun VastuNavGraph(
+    initialCallDeepLink: CallDeepLink? = null,
+    initialPostId: String? = null,
+    /** (uid, name) of the person whose chat to open, from a chat notification. */
+    initialChat: Pair<String, String>? = null
+) {
     val navController = rememberNavController()
 
     // Holds duration/cost from the most recently ended call so the
@@ -73,6 +79,14 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
                 }
                 navController.navigate(destination) {
                     popUpTo(Routes.SPLASH) { inclusive = true }
+                }
+                // Opened from a like/comment notification: show that post (Back returns to Home).
+                if (destination == Routes.HOME && initialPostId != null) {
+                    navController.navigate(Routes.postDetail(initialPostId))
+                }
+                // Opened from a chat notification: show that chat.
+                if (destination == Routes.HOME && initialChat != null) {
+                    navController.navigate(Routes.conversation(initialChat.first, initialChat.second))
                 }
             })
         }
@@ -121,7 +135,7 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
         composable(Routes.HOME) {
             HomeScreen(
                 onSearchClick = { /* TODO: dedicated search screen */ },
-                onNotificationsClick = { /* TODO: notifications screen */ },
+                onNotificationsClick = { navController.navigate(Routes.NOTIFICATIONS) },
                 onProfileClick = { navController.navigate(Routes.PROFILE) },
                 onCallExpert = { expertId, expertName, callType ->
                     navController.navigate(Routes.liveCalling(expertId, expertName, callType.name))
@@ -134,7 +148,62 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
                 onExpertCardClick = { expertUid, expertName ->
                     navController.navigate(Routes.realExpertProfile(expertUid, expertName))
                 },
-                onCallAgent = { navController.navigate(Routes.AGENT_CALLING) }
+                onCallAgent = { navController.navigate(Routes.AGENT_CALLING) },
+                onChatAgent = { navController.navigate(Routes.AGENT_CHAT) },
+                onCreatePost = { navController.navigate(Routes.CREATE_POST) },
+                onOpenPost = { navController.navigate(Routes.postDetail(it)) },
+                onChatExpert = { uid, name -> navController.navigate(Routes.conversation(uid, name)) },
+                onOpenChats = { navController.navigate(Routes.CHATS) }
+            )
+        }
+
+        composable(
+            route = Routes.CONVERSATION,
+            arguments = listOf(
+                navArgument("otherUid") { type = NavType.StringType },
+                navArgument("otherName") { type = NavType.StringType }
+            )
+        ) {
+            com.vastutalks.app.ui.screens.chat.ConversationScreen(
+                onBack = { navController.popBackStack() },
+                onCall = { uid, name, video ->
+                    navController.navigate(Routes.liveCalling(uid, name, if (video) CallType.VIDEO.name else CallType.AUDIO.name))
+                }
+            )
+        }
+
+        composable(Routes.CHATS) {
+            com.vastutalks.app.ui.screens.chat.ChatsListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenChat = { uid, name -> navController.navigate(Routes.conversation(uid, name)) }
+            )
+        }
+
+        composable(
+            route = Routes.POST_DETAIL,
+            arguments = listOf(navArgument("postId") { type = NavType.StringType })
+        ) {
+            com.vastutalks.app.ui.screens.post.PostDetailScreen(
+                onBack = { navController.popBackStack() },
+                onAuthorClick = { uid, name -> navController.navigate(Routes.realExpertProfile(uid, name)) }
+            )
+        }
+
+        composable(Routes.NOTIFICATIONS) {
+            com.vastutalks.app.ui.screens.post.NotificationsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenPost = { navController.navigate(Routes.postDetail(it)) }
+            )
+        }
+
+        composable(Routes.CREATE_POST) {
+            com.vastutalks.app.ui.screens.home.CreatePostScreen(onDone = { navController.popBackStack() })
+        }
+
+        composable(Routes.AGENT_CHAT) {
+            AgentChatScreen(
+                onBack = { navController.popBackStack() },
+                onCall = { navController.navigate(Routes.AGENT_CALLING) }
             )
         }
 
@@ -142,9 +211,13 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
             ProfileScreen(
                 onBack = { navController.popBackStack() },
                 onSignOut = {
-                    FirebaseAuth.getInstance().signOut()
-                    navController.navigate(Routes.SIGN_IN) {
-                        popUpTo(Routes.HOME) { inclusive = true }
+                    navScope.launch {
+                        // Experts show as offline straight away (no-op for normal users).
+                        userRepository.heartbeat(present = false)
+                        FirebaseAuth.getInstance().signOut()
+                        navController.navigate(Routes.SIGN_IN) {
+                            popUpTo(Routes.HOME) { inclusive = true }
+                        }
                     }
                 }
             )
@@ -163,10 +236,13 @@ fun VastuNavGraph(initialCallDeepLink: CallDeepLink? = null) {
                 expertUid = expertUid,
                 expertName = expertName,
                 onBack = { navController.popBackStack() },
-                onChatNow = { /* TODO: no chat feature yet — see README */ },
+                onAudioCall = {
+                    navController.navigate(Routes.liveCalling(expertUid, expertName, CallType.AUDIO.name))
+                },
                 onVideoCall = {
                     navController.navigate(Routes.liveCalling(expertUid, expertName, CallType.VIDEO.name))
-                }
+                },
+                onChat = { navController.navigate(Routes.conversation(expertUid, expertName)) }
             )
         }
 

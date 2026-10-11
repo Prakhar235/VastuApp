@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.LocationOn
@@ -26,6 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,7 +39,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.vastutalks.app.data.model.CallPricing
 import com.vastutalks.app.data.model.expertDisplayExtrasFor
+import com.vastutalks.app.data.repository.UserRepository
+import com.vastutalks.app.ui.components.ProfileAvatar
+import com.vastutalks.app.ui.screens.home.expertStatusColor
+import com.vastutalks.app.ui.screens.home.expertStatusLabel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 import com.vastutalks.app.ui.theme.OnlineGreen
 import com.vastutalks.app.ui.theme.SurfaceLight
 import com.vastutalks.app.ui.theme.TextSecondary
@@ -47,10 +58,22 @@ fun RealExpertProfileScreen(
     expertUid: String,
     expertName: String,
     onBack: () -> Unit,
-    onChatNow: () -> Unit,
-    onVideoCall: () -> Unit
+    onAudioCall: () -> Unit,
+    onVideoCall: () -> Unit,
+    onChat: () -> Unit
 ) {
-    val extras = remember(expertUid) { expertDisplayExtrasFor(expertUid) }
+    val extras = remember(expertUid) { expertDisplayExtrasFor(expertUid) } // only for the hidden price
+    // Live, so the buttons and status follow the expert going online/offline or onto a call.
+    val expert by remember(expertUid) { UserRepository().listenExpert(expertUid).catch { emit(null) } }
+        .collectAsState(initial = null)
+    // Re-checked every 30 s: "online" depends on how long ago their app checked in.
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(30_000)
+            value = System.currentTimeMillis()
+        }
+    }
+    val canCall = expert?.isAvailableAt(now) ?: false
 
     Column(
         modifier = Modifier
@@ -83,14 +106,7 @@ fun RealExpertProfileScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Box {
-                        AsyncImage(
-                            model = "https://i.pravatar.cc/300?u=${extras.avatarSeed}-$expertUid",
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(112.dp)
-                                .clip(CircleShape)
-                                .background(VastuPrimary.copy(alpha = 0.08f))
-                        )
+                        ProfileAvatar(expert?.photo.orEmpty(), expertName, size = 112.dp)
                         Box(
                             modifier = Modifier
                                 .size(24.dp)
@@ -99,13 +115,16 @@ fun RealExpertProfileScreen(
                                 .background(Color.White)
                                 .padding(3.dp)
                         ) {
-                            Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(OnlineGreen))
+                            Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(expert?.let { expertStatusColor(it, now) } ?: TextSecondary))
                         }
                     }
 
                     Box(modifier = Modifier.height(16.dp))
                     Text(expertName, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = Color(0xFF2B2B2B))
-                    Text(extras.specialty, color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(expert?.displaySpecialty ?: "", color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    expert?.let {
+                        Text(expertStatusLabel(it, now), color = expertStatusColor(it, now), fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
 
                     Box(modifier = Modifier.height(10.dp))
                     Box(
@@ -116,7 +135,7 @@ fun RealExpertProfileScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Star, contentDescription = null, tint = WalletGold, modifier = Modifier.size(15.dp))
-                            Text(" ${extras.rating}  ·  ${extras.reviewCount} reviews", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2B2B2B))
+                            Text(" ${expert?.consultationsLabel ?: "New"}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2B2B2B))
                         }
                     }
                 }
@@ -126,9 +145,13 @@ fun RealExpertProfileScreen(
 
             // Stat tiles
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile(icon = Icons.Filled.WorkspacePremium, label = "Experience", value = "${extras.experienceYears} yrs", modifier = Modifier.weight(1f))
-                StatTile(icon = Icons.Filled.LocationOn, label = "Location", value = extras.location, modifier = Modifier.weight(1f))
-                StatTile(icon = Icons.Outlined.AutoAwesome, label = "Rate", value = "₹${extras.pricePerSession}", modifier = Modifier.weight(1f))
+                StatTile(icon = Icons.Filled.WorkspacePremium, label = "Experience", value = expert?.experienceYears?.takeIf { it > 0 }?.let { "$it yrs" } ?: "—", modifier = Modifier.weight(1f))
+                StatTile(icon = Icons.Filled.LocationOn, label = "Location", value = expert?.city?.ifBlank { null } ?: "—", modifier = Modifier.weight(1f))
+                if (CallPricing.PAID_CALLS) {
+                    StatTile(icon = Icons.Outlined.AutoAwesome, label = "Rate", value = "₹${extras.pricePerSession}", modifier = Modifier.weight(1f))
+                } else {
+                    StatTile(icon = Icons.Outlined.AutoAwesome, label = "Consultations", value = "${expert?.consultationsCompleted ?: 0}", modifier = Modifier.weight(1f))
+                }
             }
 
             Box(modifier = Modifier.height(16.dp))
@@ -147,7 +170,7 @@ fun RealExpertProfileScreen(
                         Text("  About Expert", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF2B2B2B))
                     }
                     Box(modifier = Modifier.height(10.dp))
-                    Text(extras.bio, fontSize = 14.sp, color = TextSecondary, lineHeight = 21.sp)
+                    Text(expert?.displayBio ?: "", fontSize = 14.sp, color = TextSecondary, lineHeight = 21.sp)
                 }
             }
         }
@@ -161,34 +184,35 @@ fun RealExpertProfileScreen(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(VastuPrimary)
-                    .clickable { onChatNow() },
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Text("  Chat Now", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.White)
-                    .clickable { onVideoCall() },
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Videocam, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
-                    Text("  Video Call", color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
-            }
+            // Chat works even when the expert is offline; calls need them online.
+            CallButton(Icons.AutoMirrored.Outlined.Chat, "Chat", filled = true, enabled = true, onClick = onChat, modifier = Modifier.weight(1f))
+            CallButton(Icons.Filled.Call, "Audio", filled = false, enabled = canCall, onClick = onAudioCall, modifier = Modifier.weight(1f))
+            CallButton(Icons.Filled.Videocam, "Video", filled = false, enabled = canCall, onClick = onVideoCall, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun CallButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    filled: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val content = if (!enabled) TextSecondary else if (filled) Color.White else VastuPrimary
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (!enabled) Color(0xFFE6E4EC) else if (filled) VastuPrimary else Color.White)
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+            Text("  $label", color = content, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }
