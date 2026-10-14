@@ -22,6 +22,7 @@ import com.vastutalks.app.ui.screens.call.AgentCallingScreen
 import com.vastutalks.app.ui.screens.call.AgentInCallScreen
 import com.vastutalks.app.ui.screens.call.LiveCallingScreen
 import com.vastutalks.app.ui.screens.chat.AgentChatScreen
+import com.vastutalks.app.ui.screens.scan.RoomScanScreen
 import com.vastutalks.app.ui.screens.call.LiveInCallScreen
 import com.vastutalks.app.ui.screens.home.HomeScreen
 import com.vastutalks.app.ui.screens.profile.ProfileScreen
@@ -148,8 +149,9 @@ fun VastuNavGraph(
                 onExpertCardClick = { expertUid, expertName ->
                     navController.navigate(Routes.realExpertProfile(expertUid, expertName))
                 },
-                onCallAgent = { navController.navigate(Routes.AGENT_CALLING) },
+                onCallAgent = { navController.navigate(Routes.agentCalling(video = false)) },
                 onChatAgent = { navController.navigate(Routes.AGENT_CHAT) },
+                onScanRoom = { navController.navigate(Routes.ROOM_SCAN) },
                 onCreatePost = { navController.navigate(Routes.CREATE_POST) },
                 onOpenPost = { navController.navigate(Routes.postDetail(it)) },
                 onChatExpert = { uid, name -> navController.navigate(Routes.conversation(uid, name)) },
@@ -203,7 +205,20 @@ fun VastuNavGraph(
         composable(Routes.AGENT_CHAT) {
             AgentChatScreen(
                 onBack = { navController.popBackStack() },
-                onCall = { navController.navigate(Routes.AGENT_CALLING) }
+                onCall = { video -> navController.navigate(Routes.agentCalling(video)) },
+                onScanRoom = { navController.navigate(Routes.ROOM_SCAN) }
+            )
+        }
+
+        composable(Routes.ROOM_SCAN) {
+            RoomScanScreen(
+                onClose = { navController.popBackStack() },
+                onAskAgent = {
+                    // Back to the chat if the scan was started from it, else open the chat in place of the scan.
+                    if (!navController.popBackStack(Routes.AGENT_CHAT, inclusive = false)) {
+                        navController.navigate(Routes.AGENT_CHAT) { popUpTo(Routes.ROOM_SCAN) { inclusive = true } }
+                    }
+                }
             )
         }
 
@@ -246,10 +261,15 @@ fun VastuNavGraph(
             )
         }
 
-        composable(Routes.AGENT_CALLING) {
+        composable(
+            route = Routes.AGENT_CALLING,
+            arguments = listOf(navArgument("video") { type = NavType.BoolType })
+        ) { backStackEntry ->
+            val video = backStackEntry.arguments?.getBoolean("video") ?: false
             AgentCallingScreen(
+                isVideo = video,
                 onConnected = {
-                    navController.navigate(Routes.AGENT_IN_CALL) {
+                    navController.navigate(Routes.agentInCall(video)) {
                         popUpTo(Routes.AGENT_CALLING) { inclusive = true }
                     }
                 },
@@ -257,8 +277,12 @@ fun VastuNavGraph(
             )
         }
 
-        composable(Routes.AGENT_IN_CALL) {
+        composable(
+            route = Routes.AGENT_IN_CALL,
+            arguments = listOf(navArgument("video") { type = NavType.BoolType })
+        ) { backStackEntry ->
             AgentInCallScreen(
+                startWithVideo = backStackEntry.arguments?.getBoolean("video") ?: false,
                 onEndCall = {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.HOME) { inclusive = true }

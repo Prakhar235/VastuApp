@@ -73,7 +73,8 @@ fun RealExpertProfileScreen(
             value = System.currentTimeMillis()
         }
     }
-    val canCall = expert?.isAvailableAt(now) ?: false
+    // Offline experts can be called too (their phone rings through a push); just not mid-call.
+    val canCall = expert?.isBusyAt(now) == false
 
     Column(
         modifier = Modifier
@@ -184,7 +185,7 @@ fun RealExpertProfileScreen(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Chat works even when the expert is offline; calls need them online.
+            // Chat and calls both work while the expert is offline.
             CallButton(Icons.AutoMirrored.Outlined.Chat, "Chat", filled = true, enabled = true, onClick = onChat, modifier = Modifier.weight(1f))
             CallButton(Icons.Filled.Call, "Audio", filled = false, enabled = canCall, onClick = onAudioCall, modifier = Modifier.weight(1f))
             CallButton(Icons.Filled.Videocam, "Video", filled = false, enabled = canCall, onClick = onVideoCall, modifier = Modifier.weight(1f))

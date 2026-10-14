@@ -1,5 +1,6 @@
 package com.vastutalks.app.ui.components
 
+import com.vastutalks.app.data.ai.tr
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Videocam
@@ -81,8 +83,16 @@ object CallTones {
     val TextMuted = Color(0xFF9D98B3)
 }
 
-/** Ways to show Ananya a space: camera photo, a photo from the gallery, or a short video. */
-class ShareMediaActions(val takePhoto: () -> Unit, val pickPhoto: () -> Unit, val recordVideo: () -> Unit)
+/**
+ * Ways to show Ananya a space: camera photo, a photo from the gallery, a
+ * short video, or (when offered) a guided scan of a whole room.
+ */
+class ShareMediaActions(
+    val takePhoto: () -> Unit,
+    val pickPhoto: () -> Unit,
+    val recordVideo: () -> Unit,
+    val scanRoom: (() -> Unit)? = null
+)
 
 /** Drop-down with the three [ShareMediaActions]. */
 @Composable
@@ -93,10 +103,11 @@ fun ShareMediaMenu(expanded: Boolean, onDismiss: () -> Unit, actions: ShareMedia
         containerColor = CallTones.SurfaceRaised,
         shape = RoundedCornerShape(16.dp)
     ) {
-        listOf(
-            Triple("फ़ोटो खींचें", Icons.Outlined.PhotoCamera, actions.takePhoto),
-            Triple("गैलरी से फ़ोटो अपलोड करें", Icons.Outlined.PhotoLibrary, actions.pickPhoto),
-            Triple("वीडियो रिकॉर्ड करें (30 सेकंड तक)", Icons.Outlined.Videocam, actions.recordVideo)
+        listOfNotNull(
+            actions.scanRoom?.let { Triple(tr("Scan a whole room (wall by wall)", "पूरा कमरा स्कैन करें (हर दीवार)"), Icons.Outlined.Explore, it) },
+            Triple(tr("Take a photo", "फ़ोटो खींचें"), Icons.Outlined.PhotoCamera, actions.takePhoto),
+            Triple(tr("Upload a photo from gallery", "गैलरी से फ़ोटो अपलोड करें"), Icons.Outlined.PhotoLibrary, actions.pickPhoto),
+            Triple(tr("Record a video (up to 30 s)", "वीडियो रिकॉर्ड करें (30 सेकंड तक)"), Icons.Outlined.Videocam, actions.recordVideo)
         ).forEach { (label, icon, action) ->
             DropdownMenuItem(
                 text = { Text(label, color = CallTones.TextPrimary) },
@@ -124,7 +135,7 @@ fun AgentChatPage(
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
     media: ShareMediaActions? = null,
-    emptyHint: String = "आप और $agentName जो भी कहेंगे, वह यहाँ दिखेगा।"
+    emptyHint: String = tr("Everything you and $agentName say will show up here.", "आप और $agentName जो भी कहेंगे, वह यहाँ दिखेगा।")
 ) {
     val listState = rememberLazyListState()
 
@@ -193,7 +204,7 @@ fun AgentChatPage(
             }
             Box(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                 if (inputText.isEmpty()) {
-                    Text("$agentName से पूछें…", color = CallTones.TextMuted, fontSize = 14.sp)
+                    Text(tr("Ask $agentName…", "$agentName से पूछें…"), color = CallTones.TextMuted, fontSize = 14.sp)
                 }
                 BasicTextField(
                     value = inputText,
@@ -246,7 +257,7 @@ private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSee
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 if (isTyping) {
-                    Text("लिख रही हैं…", color = CallTones.TextMuted, fontSize = 14.sp)
+                    Text(tr("Typing…", "लिख रही हैं…"), color = CallTones.TextMuted, fontSize = 14.sp)
                 } else {
                     MessageBody(message)
                 }

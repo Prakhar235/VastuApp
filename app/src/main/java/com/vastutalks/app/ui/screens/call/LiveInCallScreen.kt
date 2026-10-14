@@ -1,5 +1,9 @@
 package com.vastutalks.app.ui.screens.call
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +25,7 @@ import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
@@ -43,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.vastutalks.app.data.call.AgoraCallManager
 import com.vastutalks.app.data.model.CallPricing
@@ -50,6 +56,7 @@ import com.vastutalks.app.data.model.ExpertProfile
 import com.vastutalks.app.ui.components.ProfileAvatar
 import com.vastutalks.app.data.model.CallType
 import com.vastutalks.app.data.model.expertDisplayExtrasFor
+import com.vastutalks.app.ui.components.DarkScreenStatusBar
 import com.vastutalks.app.ui.components.DrawingCanvasOverlay
 import com.vastutalks.app.ui.components.LocalVideoView
 import com.vastutalks.app.ui.components.RemoteVideoView
@@ -108,7 +115,22 @@ fun LiveInCallScreen(
     val startTimeMillis = remember { System.currentTimeMillis() }
     var isMuted by remember { mutableStateOf(false) }
     var isSpeakerOn by remember { mutableStateOf(true) }
-    var isCameraOff by remember { mutableStateOf(false) }
+    // Either side can switch between audio and video at any point in the call;
+    // [callType] is only how it started.
+    val isVideoOn by AgoraCallManager.localVideoOn.collectAsState()
+    val isRemoteVideoOn by AgoraCallManager.remoteVideoOn.collectAsState()
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) AgoraCallManager.setLocalVideo(true)
+        else android.widget.Toast.makeText(context, "Camera permission is needed to switch to video.", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    fun toggleVideo() {
+        when {
+            isVideoOn -> AgoraCallManager.setLocalVideo(false)
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED ->
+                AgoraCallManager.setLocalVideo(true)
+            else -> cameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     val remoteUid by AgoraCallManager.remoteUid.collectAsState()
 
@@ -150,8 +172,9 @@ fun LiveInCallScreen(
     val cost = (elapsedSeconds / 60.0) * ratePerMinute
     val remainingBalance = (startingWalletBalance - cost).coerceAtLeast(0.0)
 
-    val showRealRemoteVideo = callType == CallType.VIDEO && remoteUid != null && !isCameraOff
+    val showRealRemoteVideo = remoteUid != null && isRemoteVideoOn
 
+    DarkScreenStatusBar()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -171,6 +194,7 @@ fun LiveInCallScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TopPill(text = timerLabel)
+                TopPill(text = if (isVideoOn || isRemoteVideoOn) "Video call" else "Audio call")
                 if (CallPricing.PAID_CALLS) {
                     TopPill(text = "Cost: ₹%.2f".format(cost))
                     Box(modifier = Modifier.weight(1f))
@@ -191,7 +215,7 @@ fun LiveInCallScreen(
                             ProfileAvatar(peerPhoto, peerName, size = 124.dp)
                         }
                         Box(modifier = Modifier.size(16.dp))
-                        if (callType == CallType.VIDEO && remoteUid == null) {
+                        if (isVideoOn && remoteUid == null) {
                             Text(
                                 text = "Connecting you with ${peerName.substringBefore(" ")}…",
                                 color = Color.White.copy(alpha = 0.7f),
@@ -216,8 +240,8 @@ fun LiveInCallScreen(
                 Box(modifier = Modifier.weight(1f))
             }
 
-            // Local camera preview thumbnail, top-right-ish (video calls only).
-            if (callType == CallType.VIDEO) {
+            // Local camera preview thumbnail, top-right-ish, while this side sends video.
+            if (isVideoOn) {
                 Box(
                     modifier = Modifier
                         .padding(end = 20.dp, top = 4.dp, bottom = 12.dp)
@@ -227,11 +251,7 @@ fun LiveInCallScreen(
                         .background(Color.Black.copy(alpha = 0.35f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isCameraOff) {
-                        Icon(Icons.Filled.Person, contentDescription = null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(36.dp))
-                    } else {
-                        LocalVideoView(modifier = Modifier.fillMaxSize())
-                    }
+                    LocalVideoView(modifier = Modifier.fillMaxSize())
                 }
             }
 
@@ -243,6 +263,7 @@ fun LiveInCallScreen(
                 LiveControlButton(
                     icon = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
                     isActive = isMuted,
+                    description = if (isMuted) "Unmute" else "Mute",
                     onClick = { isMuted = !isMuted; AgoraCallManager.muteLocalAudio(isMuted) }
                 )
                 Box(
@@ -252,27 +273,30 @@ fun LiveInCallScreen(
                 ) {
                     Icon(Icons.Filled.CallEnd, contentDescription = "End call", tint = Color.White)
                 }
-                if (callType == CallType.VIDEO) {
+                LiveControlButton(
+                    icon = if (isVideoOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                    isActive = isVideoOn,
+                    description = if (isVideoOn) "Switch to audio only" else "Switch to video",
+                    onClick = ::toggleVideo
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
+            ) {
+                LiveControlButton(
+                    icon = Icons.Filled.VolumeUp,
+                    isActive = isSpeakerOn,
+                    description = if (isSpeakerOn) "Speaker off" else "Speaker on",
+                    onClick = { isSpeakerOn = !isSpeakerOn }
+                )
+                if (isVideoOn) {
                     LiveControlButton(
                         icon = Icons.Filled.Cameraswitch,
                         isActive = false,
+                        description = "Switch camera",
                         onClick = { AgoraCallManager.switchCamera() }
-                    )
-                } else {
-                    LiveControlButton(
-                        icon = Icons.Filled.VolumeUp,
-                        isActive = isSpeakerOn,
-                        onClick = { isSpeakerOn = !isSpeakerOn }
-                    )
-                }
-            }
-
-            if (callType == CallType.VIDEO) {
-                Box(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), contentAlignment = Alignment.Center) {
-                    LiveControlButton(
-                        icon = Icons.Filled.VideocamOff,
-                        isActive = isCameraOff,
-                        onClick = { isCameraOff = !isCameraOff; AgoraCallManager.muteLocalVideo(isCameraOff) }
                     )
                 }
             }
@@ -337,6 +361,7 @@ private fun TopPill(text: String) {
 private fun LiveControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isActive: Boolean,
+    description: String? = null,
     onClick: () -> Unit
 ) {
     Box(
@@ -347,6 +372,6 @@ private fun LiveControlButton(
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = if (isActive) VastuPrimaryDark else Color.White, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = description, tint = if (isActive) VastuPrimaryDark else Color.White, modifier = Modifier.size(22.dp))
     }
 }

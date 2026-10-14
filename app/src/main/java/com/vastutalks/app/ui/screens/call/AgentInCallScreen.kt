@@ -1,5 +1,6 @@
 package com.vastutalks.app.ui.screens.call
 
+import com.vastutalks.app.data.ai.tr
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,6 +64,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -96,6 +99,12 @@ import com.vastutalks.app.ui.components.CapturedPhoto
 import com.vastutalks.app.ui.components.CapturedVideo
 import com.vastutalks.app.ui.components.VideoReviewSheet
 import com.vastutalks.app.ui.components.rememberVideoCapture
+import com.vastutalks.app.ui.components.LanguageSwitch
+import com.vastutalks.app.ui.components.CameraViewfinder
+import com.vastutalks.app.ui.components.DarkScreenStatusBar
+import com.vastutalks.app.ui.components.ViewfinderState
+import com.vastutalks.app.ui.components.rememberCameraHeading
+import com.vastutalks.app.data.ai.CompassDirection
 import com.vastutalks.app.ui.components.PhotoReviewSheet
 import com.vastutalks.app.ui.components.ShareMediaActions
 import com.vastutalks.app.ui.components.ShareMediaMenu
@@ -119,15 +128,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private enum class CallPage { BOARD, CHAT }
 
-private enum class CallStatus(val label: String, val color: Color) {
-    JOINING("Joining…", CallTones.TextMuted),
-    LISTENING("Listening", OnlineGreen),
-    HEARING("Hearing you", OnlineGreen),
-    THINKING("Thinking", VastuSaffron),
-    SPEAKING("Speaking", VastuPrimary),
-    MUTED("You're muted", CallTones.TextMuted),
-    NO_MIC("Mic access needed", Danger),
-    TEXT_ONLY("Chat to talk", CallTones.TextMuted)
+private enum class CallStatus(private val english: String, private val hindi: String, val color: Color) {
+    JOINING("Joining…", "जुड़ रही हैं…", CallTones.TextMuted),
+    LISTENING("Listening", "सुन रही हैं", OnlineGreen),
+    HEARING("Hearing you", "आपको सुन रही हैं", OnlineGreen),
+    THINKING("Thinking", "सोच रही हैं", VastuSaffron),
+    SPEAKING("Speaking", "बोल रही हैं", VastuPrimary),
+    MUTED("You're muted", "आप म्यूट हैं", CallTones.TextMuted),
+    NO_MIC("Mic access needed", "माइक की अनुमति चाहिए", Danger),
+    TEXT_ONLY("Chat to talk", "बात करने के लिए लिखें", CallTones.TextMuted);
+
+    val label: String get() = tr(english, hindi)
 }
 
 /**
@@ -143,7 +154,7 @@ private enum class CallStatus(val label: String, val color: Color) {
  * the call goes (AgentCallRecorder).
  */
 @Composable
-fun AgentInCallScreen(onEndCall: () -> Unit) {
+fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val agent = remember { VastuAgent() }
@@ -174,6 +185,24 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     }
 
     val voice by rememberUpdatedState(rememberAgentVoice())
+
+    // Video mode: the caller's camera is live on screen and every turn carries
+    // the current frame and compass direction, so Ananya sees what they see.
+    // Switchable both ways during the call.
+    var isVideo by remember { mutableStateOf(false) }
+    val viewfinder = remember { ViewfinderState() }
+    val cameraHeading by rememberCameraHeading()
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) isVideo = true
+        else android.widget.Toast.makeText(context, tr("Camera permission is needed for video.", "वीडियो के लिए कैमरा की अनुमति चाहिए।"), android.widget.Toast.LENGTH_SHORT).show()
+    }
+    fun toggleVideo() {
+        when {
+            isVideo -> isVideo = false
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> isVideo = true
+            else -> cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     /** Saves whatever is on the board right now. */
     fun saveBoard(who: String, caption: String): android.graphics.Bitmap? {
@@ -226,7 +255,13 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     fun onUserSaid(text: String) {
         addMessage(AgentChatMessage(id = chatMessages.size, text = text, sender = ChatSender.USER))
         recorder.logLine("You", text)
-        askAgent { agent.reply(text) }
+        val view = if (isVideo) viewfinder.snapshot() else null
+        if (view != null) {
+            val facing = cameraHeading?.let { PhotoFacing(it, PhotoFacing.Source.COMPASS) }
+            askAgent { agent.replyWithView(text, view, facing) }
+        } else {
+            askAgent { agent.reply(text) }
+        }
     }
 
     fun sendBoardToAgent() {
@@ -275,8 +310,8 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
 
     fun sendPhoto(photo: android.graphics.Bitmap, question: String, facing: PhotoFacing?) {
         photoToReview = null
-        val caption = question.ifBlank { "इस जगह के बारे में वास्तु क्या कहता है?" } +
-            (facing?.let { " · कैमरा ${it.direction.label} की ओर" } ?: "")
+        val caption = question.ifBlank { tr("What does Vastu say about this space?", "इस जगह के बारे में वास्तु क्या कहता है?") } +
+            (facing?.let { tr(" · camera facing ${it.direction.label}", " · कैमरा ${it.direction.label} की ओर") } ?: "")
         recorder.savePhoto(photo, "Shared a photo: $caption")
         postMedia(photo, caption)
         askAgent { agent.reviewPhoto(photo, question, facing) }
@@ -285,7 +320,7 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     fun sendVideo(video: CapturedVideo, question: String, facing: PhotoFacing?) {
         videoToReview = null
         val caption = "Video (${maxOf(1, video.durationMs / 1000)}s): " +
-            question.ifBlank { "इस जगह के बारे में वास्तु क्या कहता है?" } +
+            question.ifBlank { tr("What does Vastu say about this space?", "इस जगह के बारे में वास्तु क्या कहता है?") } +
             (facing?.let { " · started facing ${it.direction.label}" } ?: "")
         recorder.saveVideo(video.file, "Shared a video: $caption")
         postMedia(video.frames.first(), caption)
@@ -331,6 +366,7 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
 
     // Ananya picks up: wait briefly for TTS so her greeting is spoken.
     LaunchedEffect(Unit) {
+        if (startWithVideo) toggleVideo()
         if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         withTimeoutOrNull(2500) { snapshotFlow { voice.isReady }.first { it } }
         askAgent { agent.greet().also { hasGreeted = true } }
@@ -362,8 +398,7 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
         !agent.isConfigured -> CallStatus.TEXT_ONLY
         else -> CallStatus.LISTENING
     }
-    val callCost = (elapsedSeconds / 60.0) * (AnanyaAgent.PRICE_PER_SESSION / 60.0)
-
+    DarkScreenStatusBar()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -380,9 +415,35 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
             CallHeader(
                 status = status,
                 isSpeaking = voice.isSpeaking,
-                timer = "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60),
-                cost = "₹%.0f".format(callCost)
+                isVideo = isVideo,
+                timer = "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
             )
+
+            if (isVideo) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(CallTones.Surface)
+                ) {
+                    CameraViewfinder(viewfinder, Modifier.fillMaxSize())
+                    Text(
+                        cameraHeading?.let { tr("Camera facing ", "कैमरा की दिशा: ") + CompassDirection.of(it).localName }
+                            ?: tr("${AnanyaAgent.NAME.substringBefore(' ')} sees your camera", "${AnanyaAgent.NAME.substringBefore(' ')} आपका कैमरा देख रही हैं"),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
 
             if (VastuAgent.BOARD_ENABLED) {
                 PageSwitch(
@@ -436,6 +497,8 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
                     else isMuted = !isMuted
                 },
                 media = ShareMediaActions(takePhoto, pickPhoto, recordVideo),
+                isVideo = isVideo,
+                onToggleVideo = ::toggleVideo,
                 onEndCall = onEndCall
             )
         }
@@ -472,11 +535,12 @@ fun AgentInCallScreen(onEndCall: () -> Unit) {
     }
 }
 
+/** Ananya, what she's doing and the call time on one line, and the reply-language switch. */
 @Composable
-private fun CallHeader(status: CallStatus, isSpeaking: Boolean, timer: String, cost: String) {
+private fun CallHeader(status: CallStatus, isSpeaking: Boolean, isVideo: Boolean, timer: String) {
     val ringColor by animateColorAsState(if (isSpeaking) VastuPrimary else Color.Transparent, label = "ring")
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -488,30 +552,28 @@ private fun CallHeader(status: CallStatus, isSpeaking: Boolean, timer: String, c
                 modifier = Modifier.fillMaxSize().clip(CircleShape).background(CallTones.SurfaceRaised)
             )
         }
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(AnanyaAgent.NAME, color = CallTones.TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+            Text(
+                AnanyaAgent.NAME,
+                color = CallTones.TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                 StatusDot(status)
                 Text(
-                    status.label,
+                    "${status.label} · ${if (isVideo) tr("Video", "वीडियो") else tr("Audio", "ऑडियो")} · $timer",
                     color = CallTones.TextMuted,
                     fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = 6.dp)
                 )
             }
         }
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(CallTones.Surface)
-                .border(1.dp, CallTones.Hairline, RoundedCornerShape(50))
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(timer, color = CallTones.TextPrimary, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
-            Box(modifier = Modifier.padding(horizontal = 8.dp).size(3.dp).clip(CircleShape).background(CallTones.TextMuted))
-            Text(cost, color = CallTones.TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        }
+        LanguageSwitch()
     }
 }
 
@@ -738,6 +800,8 @@ private fun CallControls(
     isListening: Boolean,
     onToggleMic: () -> Unit,
     media: ShareMediaActions,
+    isVideo: Boolean,
+    onToggleVideo: () -> Unit,
     onEndCall: () -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "mic")
@@ -748,7 +812,7 @@ private fun CallControls(
     )
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
@@ -777,6 +841,22 @@ private fun CallControls(
                     modifier = Modifier.size(22.dp)
                 )
             }
+        }
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(if (isVideo) CallTones.TextPrimary else CallTones.SurfaceRaised)
+                .border(1.dp, CallTones.Hairline, CircleShape)
+                .clickable { onToggleVideo() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (isVideo) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                contentDescription = if (isVideo) tr("Switch to audio call", "ऑडियो कॉल पर जाएँ") else tr("Switch to video call", "वीडियो कॉल पर जाएँ"),
+                tint = if (isVideo) CallTones.Ink else CallTones.TextPrimary,
+                modifier = Modifier.size(22.dp)
+            )
         }
         Box(
             modifier = Modifier

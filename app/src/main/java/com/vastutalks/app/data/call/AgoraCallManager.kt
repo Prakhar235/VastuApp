@@ -39,6 +39,14 @@ object AgoraCallManager {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    /** This device is sending camera video (a video call, or an audio call switched to video). */
+    private val _localVideoOn = MutableStateFlow(false)
+    val localVideoOn: StateFlow<Boolean> = _localVideoOn.asStateFlow()
+
+    /** The other person is sending camera video. */
+    private val _remoteVideoOn = MutableStateFlow(false)
+    val remoteVideoOn: StateFlow<Boolean> = _remoteVideoOn.asStateFlow()
+
     private val eventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             Log.i(TAG, "Joined channel=$channel uid=$uid")
@@ -54,6 +62,15 @@ object AgoraCallManager {
             Log.i(TAG, "Remote user left uid=$uid reason=$reason")
             if (_remoteUid.value == uid) {
                 _remoteUid.value = null
+                _remoteVideoOn.value = false
+            }
+        }
+
+        override fun onRemoteVideoStateChanged(uid: Int, state: Int, reason: Int, elapsed: Int) {
+            Log.i(TAG, "Remote video uid=$uid state=$state reason=$reason")
+            when (state) {
+                Constants.REMOTE_VIDEO_STATE_STARTING, Constants.REMOTE_VIDEO_STATE_DECODING -> _remoteVideoOn.value = true
+                Constants.REMOTE_VIDEO_STATE_STOPPED, Constants.REMOTE_VIDEO_STATE_FAILED -> _remoteVideoOn.value = false
             }
         }
 
@@ -99,12 +116,14 @@ object AgoraCallManager {
 
             rtcEngine.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION)
 
-            if (isVideoCall) {
-                rtcEngine.enableVideo()
-                rtcEngine.startPreview()
-            } else {
-                rtcEngine.disableVideo()
-            }
+            // Video is always enabled so either side can switch an audio call to
+            // video (and still see the other's camera); an audio call just
+            // doesn't capture or send its own camera until switched.
+            rtcEngine.enableVideo()
+            rtcEngine.enableLocalVideo(isVideoCall)
+            if (isVideoCall) rtcEngine.startPreview()
+            _localVideoOn.value = isVideoCall
+            _remoteVideoOn.value = false
 
             val options = ChannelMediaOptions().apply {
                 clientRoleType = Constants.CLIENT_ROLE_BROADCASTER
@@ -127,8 +146,13 @@ object AgoraCallManager {
         engine?.muteLocalAudioStream(mute)
     }
 
-    fun muteLocalVideo(mute: Boolean) {
-        engine?.muteLocalVideoStream(mute)
+    /** Switches this side between audio only and sending camera video, mid-call. */
+    fun setLocalVideo(on: Boolean) {
+        val rtcEngine = engine ?: return
+        rtcEngine.enableLocalVideo(on)
+        if (on) rtcEngine.startPreview() else rtcEngine.stopPreview()
+        rtcEngine.updateChannelMediaOptions(ChannelMediaOptions().apply { publishCameraTrack = on })
+        _localVideoOn.value = on
     }
 
     fun switchCamera() {
@@ -141,6 +165,8 @@ object AgoraCallManager {
 
     /** Leaves the channel and fully tears down the engine. Safe to call multiple times. */
     fun leaveAndRelease() {
+        _localVideoOn.value = false
+        _remoteVideoOn.value = false
         val current = engine ?: run {
             _connectionState.value = CallConnectionState.IDLE
             _remoteUid.value = null

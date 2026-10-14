@@ -26,10 +26,15 @@ object Routes {
     // Call with the AI agent Ananya — runs on the device plus the OpenAI
     // API; no Firestore signaling or Agora token. See AnanyaAgent.kt /
     // AgentCallingScreen.kt.
-    const val AGENT_CALLING = "agent_calling"
-    const val AGENT_IN_CALL = "agent_in_call"
+    /** {video}: true to start with the camera on; switchable during the call either way. */
+    const val AGENT_CALLING = "agent_calling/{video}"
+    const val AGENT_IN_CALL = "agent_in_call/{video}"
+    fun agentCalling(video: Boolean) = "agent_calling/$video"
+    fun agentInCall(video: Boolean) = "agent_in_call/$video"
     /** Text chat with Ananya (same agent, no voice). */
     const val AGENT_CHAT = "agent_chat"
+    /** Guided room scan: a photo of each wall, then Ananya's read of the room. */
+    const val ROOM_SCAN = "room_scan"
 
     fun liveCalling(calleeUid: String, calleeName: String, callType: String) =
         "live_calling/${java.net.URLEncoder.encode(calleeUid, "UTF-8")}/${java.net.URLEncoder.encode(calleeName, "UTF-8")}/$callType"

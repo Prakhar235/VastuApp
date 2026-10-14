@@ -15,8 +15,8 @@ object AnanyaAgent {
     const val RATING = 4.9
     const val PRICE_PER_SESSION = 1200
     /**
-     * Calling her is hidden for now — only the chat is offered. Flip this to
-     * bring back the "Call Ananya" card on Home and the call button in the chat.
+     * Shows the audio/video call buttons for her on Home and in the chat.
+     * Turn off to offer only the chat.
      */
-    const val CALL_ENABLED = false
+    const val CALL_ENABLED = true
 }

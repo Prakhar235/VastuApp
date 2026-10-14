@@ -1,5 +1,6 @@
 package com.vastutalks.app.ui.components
 
+import com.vastutalks.app.data.ai.tr
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -138,7 +139,7 @@ fun rememberPhotoPicker(
         if (uri == null) return@rememberLauncherForActivityResult // nothing picked
         scope.launch {
             val photo = withContext(Dispatchers.IO) { runCatching { loadPhoto(context, uri, maxSide) }.getOrNull() }
-            if (photo != null) currentOnPicked(photo) else currentOnError("यह फ़ोटो खुल नहीं पाई — कोई दूसरी चुनें।")
+            if (photo != null) currentOnPicked(photo) else currentOnError(tr("Couldn't open that photo — pick another one.", "यह फ़ोटो खुल नहीं पाई — कोई दूसरी चुनें।"))
         }
     }
     return {
@@ -176,7 +177,7 @@ internal fun rememberCameraPermissionGate(onDenied: () -> Unit, open: () -> Unit
 class CapturedPhoto(val bitmap: Bitmap, val exifHeading: Float?)
 
 /** Decodes without loading the full 12 MP image into memory, then fixes camera rotation. */
-private fun loadPhoto(context: Context, uri: Uri, maxSide: Int): CapturedPhoto? {
+internal fun loadPhoto(context: Context, uri: Uri, maxSide: Int): CapturedPhoto? {
     val resolver = context.contentResolver
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -279,9 +280,9 @@ internal fun CaptureReviewSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(if (isVideo) "इस वीडियो पर वास्तु सलाह" else "इस फ़ोटो पर वास्तु सलाह", color = CallTones.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (isVideo) tr("Vastu advice on this video", "इस वीडियो पर वास्तु सलाह") else tr("Vastu advice on this photo", "इस फ़ोटो पर वास्तु सलाह"), color = CallTones.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "$agentName फ़ोटो पर निशान लगाकर वास्तु सुझाव देंगी",
+                        tr("$agentName will mark her Vastu suggestions on the photo", "$agentName फ़ोटो पर निशान लगाकर वास्तु सुझाव देंगी"),
                         color = CallTones.TextMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 2.dp)
@@ -352,7 +353,7 @@ internal fun CaptureReviewSheet(
             ) {
                 if (question.isEmpty()) {
                     Text(
-                        "कुछ पूछना हो तो लिखें (ज़रूरी नहीं) — जैसे “बेडरूम, दरवाज़ा पूर्व में”",
+                        tr("Add a question if you like (optional) — e.g. “bedroom, door in the East”", "कुछ पूछना हो तो लिखें (ज़रूरी नहीं) — जैसे “बेडरूम, दरवाज़ा पूर्व में”"),
                         color = CallTones.TextMuted,
                         fontSize = 14.sp
                     )
@@ -383,7 +384,7 @@ internal fun CaptureReviewSheet(
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (isVideo) "Record again" else "Retake", color = CallTones.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(if (isVideo) tr("Record again", "फिर रिकॉर्ड करें") else tr("Retake", "फिर खींचें"), color = CallTones.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 Box(
                     modifier = Modifier
@@ -394,7 +395,7 @@ internal fun CaptureReviewSheet(
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("$agentName से पूछें", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(tr("Ask $agentName", "$agentName से पूछें"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
         }
@@ -406,20 +407,20 @@ internal fun CaptureReviewSheet(
 private fun FacingPicker(facing: PhotoFacing?, isVideo: Boolean, onPick: (CompassDirection) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
         Text(
-            text = facing?.let { "${if (isVideo) "Started facing" else "Camera facing"} ${it.direction.label} (${it.direction.vastuName})" }
-                ?: if (isVideo) "Which way did the video start facing?" else "Which way was the camera facing?",
+            text = facing?.let { "${if (isVideo) tr("Started facing", "शुरुआत की दिशा:") else tr("Camera facing", "कैमरे की दिशा:")} ${it.direction.label} (${it.direction.vastuName})" }
+                ?: if (isVideo) tr("Which way did the video start facing?", "वीडियो किस दिशा से शुरू हुआ?") else tr("Which way was the camera facing?", "कैमरा किस दिशा में था?"),
             color = CallTones.TextPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
         )
         Text(
             text = when (facing?.source) {
-                PhotoFacing.Source.PHOTO -> "From the compass reading saved in the photo · tap to change"
+                PhotoFacing.Source.PHOTO -> tr("From the compass reading saved in the photo · tap to change", "फ़ोटो में सेव कम्पास से · बदलने के लिए टैप करें")
                 PhotoFacing.Source.COMPASS ->
-                    if (isVideo) "Live compass — point your phone where you started recording, or tap a direction"
-                    else "Live compass — point your phone the way you took the photo, or tap a direction"
-                PhotoFacing.Source.CALLER -> "Set by you · tap it again to use the compass"
-                null -> "No compass on this phone — tap a direction"
+                    if (isVideo) tr("Live compass — point your phone where you started recording, or tap a direction", "लाइव कम्पास — फ़ोन उस ओर करें जहाँ से रिकॉर्डिंग शुरू की, या दिशा टैप करें")
+                    else tr("Live compass — point your phone the way you took the photo, or tap a direction", "लाइव कम्पास — फ़ोन उस ओर करें जिधर फ़ोटो ली, या दिशा टैप करें")
+                PhotoFacing.Source.CALLER -> tr("Set by you · tap it again to use the compass", "आपने चुना · कम्पास के लिए फिर टैप करें")
+                null -> tr("No compass on this phone — tap a direction", "इस फ़ोन में कम्पास नहीं — दिशा टैप करें")
             },
             color = CallTones.TextMuted,
             fontSize = 12.sp,

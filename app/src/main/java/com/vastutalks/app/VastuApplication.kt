@@ -16,6 +16,7 @@ const val MESSAGES_CHANNEL_ID = "messages"
 class VastuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        com.vastutalks.app.data.ai.AgentLanguagePref.init(this)
         createIncomingCallChannel()
         createPostActivityChannel()
     }

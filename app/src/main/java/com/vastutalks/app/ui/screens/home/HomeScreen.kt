@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -107,6 +108,7 @@ fun HomeScreen(
     onExpertCardClick: (expertId: String, expertName: String) -> Unit = { _, _ -> },
     onCallAgent: () -> Unit = {},
     onChatAgent: () -> Unit = {},
+    onScanRoom: () -> Unit = {},
     onCreatePost: () -> Unit = {},
     onOpenPost: (postId: String) -> Unit = {},
     onChatExpert: (expertId: String, expertName: String) -> Unit = { _, _ -> },
@@ -249,6 +251,7 @@ fun HomeScreen(
                 onExpertCardClick = onExpertCardClick,
                 onCallAgent = onCallAgent,
                 onChatAgent = onChatAgent,
+                onScanRoom = onScanRoom,
                 onChatExpert = onChatExpert
             )
         }
@@ -333,7 +336,8 @@ private fun ExpertDashboard(
         }
         Box(modifier = Modifier.height(12.dp))
 
-        // Availability switch: offline experts stay listed but can't be called.
+        // Availability switch: shows users whether the expert is around. Offline
+        // experts can still be called — their phone rings through a push.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -351,7 +355,7 @@ private fun ExpertDashboard(
                     color = Color(0xFF2B2B2B)
                 )
                 Text(
-                    if (isOnline) "Users can call you for audio and video consultations" else "Users can see you but can't call you",
+                    if (isOnline) "Users can call you for audio and video consultations" else "Users can still call you — your phone will ring",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
@@ -498,6 +502,7 @@ private fun NormalUserHome(
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
     onCallAgent: () -> Unit,
     onChatAgent: () -> Unit,
+    onScanRoom: () -> Unit,
     onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.EXPERTS) }
@@ -547,7 +552,7 @@ private fun NormalUserHome(
         Box(modifier = Modifier.height(16.dp))
 
         when (selectedTab) {
-            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, now, expertsError, onCallExpert, onExpertCardClick, onCallAgent, onChatAgent, onChatExpert)
+            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, now, expertsError, onCallExpert, onExpertCardClick, onCallAgent, onChatAgent, onScanRoom, onChatExpert)
             HomeTab.POSTS -> PostsFeed(
                 posts,
                 likedPostIds = likedPostIds,
@@ -560,6 +565,41 @@ private fun NormalUserHome(
 }
 
 private enum class HomeTab { EXPERTS, POSTS }
+
+/** Ananya, the AI Vastu expert, with her two ways in: chat and call. */
+@Composable
+private fun AnanyaCard(onChat: () -> Unit, onCall: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(VastuPrimary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Ananya — AI Vastu expert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
+                Text("Available anytime · English or Hindi · share room photos", fontSize = 11.sp, color = TextSecondary)
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CallChip(Icons.AutoMirrored.Outlined.Chat, "Chat", enabled = true, modifier = Modifier.weight(1f), onClick = onChat)
+            if (AnanyaAgent.CALL_ENABLED) {
+                CallChip(Icons.Filled.Call, "Call", enabled = true, modifier = Modifier.weight(1f), onClick = onCall)
+            }
+        }
+    }
+}
 
 @Composable
 private fun AgentCard(
@@ -622,6 +662,7 @@ private fun ExpertsTabContent(
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
     onCallAgent: () -> Unit,
     onChatAgent: () -> Unit,
+    onScanRoom: () -> Unit,
     onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     Column {
@@ -654,23 +695,16 @@ private fun ExpertsTabContent(
         Box(modifier = Modifier.height(12.dp))
 
         // Ananya, the AI Vastu agent — always available, no human
-        // expert needs to be online. Only the chat is offered for now
-        // (AnanyaAgent.CALL_ENABLED).
+        // expert needs to be online. Chat or call her (the call can
+        // switch between audio and video).
+        AnanyaCard(onChat = onChatAgent, onCall = onCallAgent)
+        Box(modifier = Modifier.height(10.dp))
         AgentCard(
-            icon = Icons.AutoMirrored.Outlined.Chat,
-            title = "Ananya से चैट करें — AI वास्तु विशेषज्ञ",
-            subtitle = "हिंदी में सवाल पूछें या कमरे की फ़ोटो भेजें — सुझाव फ़ोटो पर निशान लगाकर",
-            onClick = onChatAgent
+            icon = Icons.Outlined.Explore,
+            title = "Scan a room — Vastu check",
+            subtitle = "Photograph each wall with the compass; get a score and what to fix, marked on your photos",
+            onClick = onScanRoom
         )
-        if (AnanyaAgent.CALL_ENABLED) {
-            Box(modifier = Modifier.height(10.dp))
-            AgentCard(
-                icon = Icons.Filled.Videocam,
-                title = "Call Ananya — AI Vastu Expert",
-                subtitle = "Talk, sketch or share photos and videos — available anytime",
-                onClick = onCallAgent
-            )
-        }
 
         Box(modifier = Modifier.height(20.dp))
 
@@ -812,11 +846,13 @@ private fun LiveExpertCard(
                 )
             }
             Box(modifier = Modifier.height(10.dp))
-            // The three ways to reach an expert. Chat works even when they're offline.
+            // The three ways to reach an expert. All work while they're offline
+            // (a call rings their phone through a push); only a call they're
+            // already on blocks a new one.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CallChip(Icons.AutoMirrored.Outlined.Chat, "Chat", enabled = true, modifier = Modifier.weight(1f), onClick = onChat)
-                CallChip(Icons.Filled.Call, "Audio", enabled = expert.isAvailableAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.AUDIO) }
-                CallChip(Icons.Filled.Videocam, "Video", enabled = expert.isAvailableAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.VIDEO) }
+                CallChip(Icons.Filled.Call, "Audio", enabled = !expert.isBusyAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.AUDIO) }
+                CallChip(Icons.Filled.Videocam, "Video", enabled = !expert.isBusyAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.VIDEO) }
             }
         }
     }

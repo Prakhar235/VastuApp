@@ -51,7 +51,7 @@ fun VastuTalksTheme(
             val activity = view.context as? Activity
             activity?.window?.let { window ->
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                    !darkTheme
+                    !darkTheme && !com.vastutalks.app.ui.components.DarkScreenStatusBarState.isActive
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     window.statusBarColor = android.graphics.Color.TRANSPARENT
                 }

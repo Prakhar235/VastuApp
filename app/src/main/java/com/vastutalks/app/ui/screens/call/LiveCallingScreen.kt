@@ -48,6 +48,7 @@ import com.vastutalks.app.data.call.TokenRepository
 import com.vastutalks.app.data.model.CallRequestStatus
 import com.vastutalks.app.data.model.CallType
 import com.vastutalks.app.data.repository.CallSignalingRepository
+import com.vastutalks.app.ui.components.DarkScreenStatusBar
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.VastuCharcoal
 import com.vastutalks.app.ui.theme.VastuPrimary
@@ -62,7 +63,9 @@ private const val RING_TIMEOUT_MILLIS = 45_000L
  * expert (as opposed to a call with the AI agent Ananya — see
  * AgentCallingScreen).
  *
- * Flow: check the expert is online and not on another call -> write a
+ * Flow: check the expert isn't on another call (being offline is fine:
+ * the push from onCallRequestCreated rings their phone even with the
+ * app closed) -> write a
  * CallRequest -> wait for the callee to Accept/Decline (live Firestore
  * listener; gives up after [RING_TIMEOUT_MILLIS]) -> once accepted,
  * fetch a fresh token from the generateAgoraToken Cloud Function ->
@@ -116,12 +119,11 @@ fun LiveCallingScreen(
             return@LaunchedEffect
         }
 
-        // Don't ring someone who can't pick up.
+        // Offline is fine — the push rings their phone — but don't ring someone mid-call.
         val expert = UserRepository().getExpert(calleeUid).getOrNull()
         val now = System.currentTimeMillis()
         if (expert != null && !expert.isPresentAt(now)) {
-            errorText = "$calleeName is offline right now. Please try again later."
-            return@LaunchedEffect
+            statusText = "Ringing $calleeName's phone…\nThey're offline, so it may take a moment."
         }
         if (expert != null && expert.isBusyAt(now)) {
             errorText = "$calleeName is on another call. Please try again in a few minutes."
@@ -205,6 +207,7 @@ fun LiveCallingScreen(
         label = "pulse_scale"
     )
 
+    DarkScreenStatusBar()
     Box(modifier = Modifier.fillMaxSize().background(VastuCharcoal), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(

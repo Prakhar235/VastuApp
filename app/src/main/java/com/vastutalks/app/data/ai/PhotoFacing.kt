@@ -3,17 +3,20 @@ package com.vastutalks.app.data.ai
 import kotlin.math.roundToInt
 
 /** The eight Vastu directions, clockwise from North. */
-enum class CompassDirection(val short: String, val label: String, val vastuName: String) {
-    N("N", "North", "Uttar"),
-    NE("NE", "North-East", "Ishan"),
-    E("E", "East", "Purva"),
-    SE("SE", "South-East", "Agneya"),
-    S("S", "South", "Dakshin"),
-    SW("SW", "South-West", "Nairutya"),
-    W("W", "West", "Paschim"),
-    NW("NW", "North-West", "Vayavya");
+enum class CompassDirection(val short: String, val label: String, val vastuName: String, val hindi: String) {
+    N("N", "North", "Uttar", "उत्तर"),
+    NE("NE", "North-East", "Ishan", "उत्तर-पूर्व"),
+    E("E", "East", "Purva", "पूर्व"),
+    SE("SE", "South-East", "Agneya", "दक्षिण-पूर्व"),
+    S("S", "South", "Dakshin", "दक्षिण"),
+    SW("SW", "South-West", "Nairutya", "दक्षिण-पश्चिम"),
+    W("W", "West", "Paschim", "पश्चिम"),
+    NW("NW", "North-West", "Vayavya", "उत्तर-पश्चिम");
 
     val degrees: Float get() = ordinal * 45f
+
+    /** The name in the chosen app language. */
+    val localName: String get() = tr(label, hindi)
 
     /** The direction [steps] eighth-turns clockwise from this one (negative = anticlockwise). */
     fun turn(steps: Int): CompassDirection = entries[Math.floorMod(ordinal + steps, entries.size)]

@@ -95,6 +95,11 @@ dependencies {
     implementation("com.google.firebase:firebase-functions-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
 
+    // CameraX — in-app viewfinder for the guided room scan (compass overlay on the live camera)
+    implementation("androidx.camera:camera-camera2:1.5.0")
+    implementation("androidx.camera:camera-lifecycle:1.5.0")
+    implementation("androidx.camera:camera-view:1.5.0")
+
     // Coil for image loading (expert avatars, etc.)
     implementation("io.coil-kt:coil-compose:2.7.0")
 

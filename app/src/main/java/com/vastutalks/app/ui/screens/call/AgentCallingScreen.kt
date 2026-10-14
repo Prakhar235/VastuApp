@@ -28,7 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.vastutalks.app.data.ai.tr
 import com.vastutalks.app.data.model.AnanyaAgent
+import com.vastutalks.app.ui.components.DarkScreenStatusBar
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.VastuCharcoal
 import com.vastutalks.app.ui.theme.VastuPrimary
@@ -41,6 +43,7 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun AgentCallingScreen(
+    isVideo: Boolean = false,
     onConnected: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -56,6 +59,7 @@ fun AgentCallingScreen(
         label = "ringing_pulse_scale"
     )
 
+    DarkScreenStatusBar()
     Box(
         modifier = Modifier.fillMaxSize().background(VastuCharcoal),
         contentAlignment = Alignment.Center
@@ -74,9 +78,9 @@ fun AgentCallingScreen(
             Box(modifier = Modifier.size(28.dp))
             Text(AnanyaAgent.NAME, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Box(modifier = Modifier.size(6.dp))
-            Text("Calling…", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+            Text(if (isVideo) tr("Video calling…", "वीडियो कॉल हो रही है…") else tr("Calling…", "कॉल हो रही है…"), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
             Box(modifier = Modifier.size(6.dp))
-            Text("AI Vastu expert", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+            Text(tr("AI Vastu expert", "AI वास्तु विशेषज्ञ"), color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
             Box(modifier = Modifier.size(64.dp))
             Box(
                 modifier = Modifier
