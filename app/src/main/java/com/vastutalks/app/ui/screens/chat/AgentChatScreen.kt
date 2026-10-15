@@ -19,7 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -142,7 +142,9 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
                     Bitmap.createScaledBitmap(first, (first.width * scale).toInt(), (first.height * scale).toInt(), true)
                 )
                 val photo = scan.analysis.findings.firstOrNull()?.photo ?: 0
-                add(scan.analysis.asText(), ChatSender.AGENT, scan.analysis.markedPhoto(scan.walls, photo))
+                val reportId = nextId
+                store.saveReport(reportId, scan.walls, scan.analysis)
+                add(scan.analysis.asText(), ChatSender.AGENT, scan.analysis.markedPhoto(scan.walls, photo), hasReport = true)
             }
         }
     }
@@ -158,8 +160,8 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
         ask { agent.greet() }
     }
 
-    private fun add(text: String, sender: ChatSender, image: Bitmap? = null) {
-        messages.add(AgentChatMessage(nextId++, text, sender, image?.asImageBitmap()))
+    private fun add(text: String, sender: ChatSender, image: Bitmap? = null, hasReport: Boolean = false) {
+        messages.add(AgentChatMessage(nextId++, text, sender, image?.asImageBitmap(), hasReport))
         save()
     }
 
@@ -224,8 +226,11 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
 @Composable
 fun AgentChatScreen(
     onBack: () -> Unit,
-    onCall: (video: Boolean) -> Unit = {},
+    /** Starts as audio; the camera can be turned on during the call. */
+    onCall: () -> Unit = {},
     onScanRoom: () -> Unit = {},
+    /** Opens the full room report saved with that chat message. */
+    onOpenReport: (messageId: Int) -> Unit = {},
     viewModel: AgentChatViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -245,6 +250,7 @@ fun AgentChatScreen(
                 isTyping = viewModel.pendingTurns > 0,
                 onBack = onBack,
                 onCall = onCall,
+                onScanRoom = onScanRoom,
                 onNewChat = { confirmNewChat = true }
             )
             AgentChatPage(
@@ -256,6 +262,7 @@ fun AgentChatScreen(
                 onInputChange = { viewModel.input = it },
                 onSend = viewModel::sendTyped,
                 media = ShareMediaActions(takePhoto, pickPhoto, recordVideo, scanRoom = onScanRoom),
+                onOpenReport = { onOpenReport(it.id) },
                 emptyHint = tr(
                     "Ask a question, send a photo of any room, or scan a whole room — ${AnanyaAgent.NAME.substringBefore(' ')} marks her Vastu suggestions right on the photo.",
                     "सवाल पूछें, किसी कमरे की फ़ोटो भेजें या पूरा कमरा स्कैन करें — ${AnanyaAgent.NAME.substringBefore(' ')} फ़ोटो पर ही निशान लगाकर वास्तु सुझाव देंगी।"
@@ -306,12 +313,11 @@ fun AgentChatScreen(
 }
 
 /**
- * Back, Ananya, then her two call buttons (audio and video) and a menu
- * with the reply language and "New chat". Kept to one line so it fits
- * narrow phones.
+ * Back, Ananya, then room scan, call, and a menu with the reply
+ * language and "New chat". Kept to one line so it fits narrow phones.
  */
 @Composable
-private fun ChatHeader(isTyping: Boolean, onBack: () -> Unit, onCall: (video: Boolean) -> Unit, onNewChat: () -> Unit) {
+private fun ChatHeader(isTyping: Boolean, onBack: () -> Unit, onCall: () -> Unit, onScanRoom: () -> Unit, onNewChat: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -348,9 +354,9 @@ private fun ChatHeader(isTyping: Boolean, onBack: () -> Unit, onCall: (video: Bo
                 )
             }
         }
+        HeaderIconButton(Icons.Outlined.Explore, tr("Scan a room", "कमरा स्कैन करें"), onClick = onScanRoom)
         if (AnanyaAgent.CALL_ENABLED) {
-            HeaderIconButton(Icons.Filled.Call, tr("Audio call ${AnanyaAgent.NAME}", "${AnanyaAgent.NAME} को ऑडियो कॉल")) { onCall(false) }
-            HeaderIconButton(Icons.Filled.Videocam, tr("Video call ${AnanyaAgent.NAME}", "${AnanyaAgent.NAME} को वीडियो कॉल")) { onCall(true) }
+            HeaderIconButton(Icons.Filled.Call, tr("Call ${AnanyaAgent.NAME}", "${AnanyaAgent.NAME} को कॉल करें"), onClick = onCall)
         }
         Box {
             var menuOpen by remember { mutableStateOf(false) }

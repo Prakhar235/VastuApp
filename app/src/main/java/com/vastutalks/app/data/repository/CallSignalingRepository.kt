@@ -58,6 +58,17 @@ class CallSignalingRepository(
         }
     }
 
+    /** Expert side: who placed the call this expert most recently accepted (the one they're on), or null. */
+    suspend fun latestAcceptedCallerUid(expertUid: String): String? = runCatching {
+        collection()
+            .whereEqualTo("calleeUid", expertUid)
+            .whereEqualTo("status", CallRequestStatus.ACCEPTED.name)
+            .get().await()
+            .toObjects(CallRequest::class.java)
+            .maxByOrNull { it.createdAtMillis }
+            ?.callerUid
+    }.getOrNull()
+
     /** Expert side: live stream of calls ringing for this uid. This is the "real-time" part — no polling, no push setup needed. */
     fun listenForIncomingCalls(myUid: String): Flow<CallRequest?> = callbackFlow {
         val registration = collection()

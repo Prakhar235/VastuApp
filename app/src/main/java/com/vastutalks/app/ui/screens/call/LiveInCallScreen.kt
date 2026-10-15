@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +52,9 @@ import coil.compose.AsyncImage
 import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.vastutalks.app.data.call.AgoraCallManager
+import com.vastutalks.app.ui.screens.chat.ConversationScreen
+import com.vastutalks.app.ui.screens.chat.ConversationViewModel
+import androidx.lifecycle.viewmodel.initializer
 import com.vastutalks.app.data.model.CallPricing
 import com.vastutalks.app.data.model.ExpertProfile
 import com.vastutalks.app.ui.components.ProfileAvatar
@@ -63,14 +67,15 @@ import com.vastutalks.app.ui.components.RemoteVideoView
 import com.vastutalks.app.ui.theme.Danger
 import com.vastutalks.app.ui.theme.VastuPrimary
 import com.vastutalks.app.ui.theme.VastuPrimaryDark
+import com.vastutalks.app.data.repository.CallSignalingRepository
 import com.vastutalks.app.data.repository.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** How long to wait for the other person to come back after they drop before ending the call. */
-private const val REMOTE_GONE_GRACE_MILLIS = 8_000L
+/** How long to wait for the other person to join after the call was answered before giving up. */
+private const val REMOTE_JOIN_TIMEOUT_MILLIS = 30_000L
 
 /**
  * In-call UI for the real signaling flow (LiveCallingScreen /
@@ -134,6 +139,14 @@ fun LiveInCallScreen(
 
     val remoteUid by AgoraCallManager.remoteUid.collectAsState()
 
+    // Chat with the other person without leaving the call. The user knows the
+    // expert's uid from the channel; the expert looks up who called.
+    var peerUid by remember { mutableStateOf(if (isExpertOnThisDevice) null else expertUid) }
+    var showChat by remember { mutableStateOf(false) }
+    LaunchedEffect(expertUid) {
+        if (isExpertOnThisDevice) peerUid = CallSignalingRepository().latestAcceptedCallerUid(expertUid)
+    }
+
     // The expert shows as "on a call" to everyone else until this screen closes.
     // Cleared from a scope that outlives the screen, so it isn't cancelled on the way out.
     DisposableEffect(Unit) {
@@ -144,18 +157,30 @@ fun LiveInCallScreen(
         }
     }
 
-    // When the other person hangs up (or drops and doesn't come back within a
-    // few seconds), end the call here too instead of sitting in an empty call.
-    var remoteJoined by remember { mutableStateOf(false) }
-    LaunchedEffect(remoteUid) {
-        if (remoteUid != null) {
-            remoteJoined = true
-        } else if (remoteJoined) {
-            delay(REMOTE_GONE_GRACE_MILLIS)
-            android.widget.Toast.makeText(context, "$peerName left the call", android.widget.Toast.LENGTH_SHORT).show()
-            onEndCall(elapsedSeconds, startTimeMillis)
+    // When the other person hangs up (or drops out), end the call here too
+    // instead of sitting in an empty call. Same if they never join.
+    val remoteLeft by AgoraCallManager.remoteLeft.collectAsState()
+    var callEnded by remember { mutableStateOf(false) }
+    fun endCall() {
+        if (callEnded) return
+        callEnded = true
+        onEndCall(elapsedSeconds, startTimeMillis)
+    }
+    LaunchedEffect(remoteLeft) {
+        if (remoteLeft) {
+            android.widget.Toast.makeText(context, "$peerName ended the call", android.widget.Toast.LENGTH_SHORT).show()
+            endCall()
         }
     }
+    LaunchedEffect(remoteUid) {
+        if (remoteUid == null && !remoteLeft) {
+            delay(REMOTE_JOIN_TIMEOUT_MILLIS)
+            android.widget.Toast.makeText(context, "$peerName couldn't join the call", android.widget.Toast.LENGTH_SHORT).show()
+            endCall()
+        }
+    }
+    // Back hangs up properly (and logs the call) rather than just leaving the screen.
+    androidx.activity.compose.BackHandler { endCall() }
 
     LaunchedEffect(isSpeakerOn) { AgoraCallManager.setSpeakerphoneEnabled(isSpeakerOn) }
 
@@ -184,7 +209,7 @@ fun LiveInCallScreen(
             RemoteVideoView(uid = remoteUid!!, modifier = Modifier.fillMaxSize())
         }
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             // Top pills: timer, live cost, wallet balance.
             Row(
                 modifier = Modifier
@@ -241,7 +266,8 @@ fun LiveInCallScreen(
             }
 
             // Local camera preview thumbnail, top-right-ish, while this side sends video.
-            if (isVideoOn) {
+            // Hidden under the chat: it draws above everything (see LocalVideoView).
+            if (isVideoOn && !showChat) {
                 Box(
                     modifier = Modifier
                         .padding(end = 20.dp, top = 4.dp, bottom = 12.dp)
@@ -268,7 +294,7 @@ fun LiveInCallScreen(
                 )
                 Box(
                     modifier = Modifier.size(64.dp).clip(CircleShape).background(Danger)
-                        .clickable { onEndCall(elapsedSeconds, startTimeMillis) },
+                        .clickable { endCall() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Filled.CallEnd, contentDescription = "End call", tint = Color.White)
@@ -310,7 +336,10 @@ fun LiveInCallScreen(
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.15f))
-                        .clickable { /* TODO: no in-call chat feature yet — see README */ },
+                        .clickable {
+                            if (peerUid != null) showChat = true
+                            else android.widget.Toast.makeText(context, "Chat is still loading — try again in a moment.", android.widget.Toast.LENGTH_SHORT).show()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Filled.Chat, contentDescription = "Chat", tint = Color.White, modifier = Modifier.size(20.dp))
@@ -331,6 +360,10 @@ fun LiveInCallScreen(
                     }
                 }
             }
+        }
+
+        peerUid?.takeIf { showChat }?.let { uid ->
+            InCallChat(peerUid = uid, peerName = peerName, onClose = { showChat = false })
         }
 
         if (showDrawingCanvas) {
@@ -374,4 +407,25 @@ private fun LiveControlButton(
     ) {
         Icon(icon, contentDescription = description, tint = if (isActive) VastuPrimaryDark else Color.White, modifier = Modifier.size(22.dp))
     }
+}
+/**
+ * The chat with the other person, over the call (which keeps going
+ * underneath). Back or the arrow returns to the call.
+ */
+@Composable
+private fun InCallChat(peerUid: String, peerName: String, onClose: () -> Unit) {
+    val viewModel: ConversationViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "in-call-chat-$peerUid",
+        factory = androidx.lifecycle.viewmodel.viewModelFactory {
+            initializer {
+                ConversationViewModel(
+                    androidx.lifecycle.SavedStateHandle(
+                        mapOf("otherUid" to peerUid, "otherName" to java.net.URLEncoder.encode(peerName.ifBlank { "Chat" }, "UTF-8"))
+                    )
+                )
+            }
+        }
+    )
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    ConversationScreen(onBack = onClose, onCall = { _, _ -> }, showCallButton = false, viewModel = viewModel)
 }

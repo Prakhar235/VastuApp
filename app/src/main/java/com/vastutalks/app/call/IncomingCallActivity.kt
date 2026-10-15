@@ -77,7 +77,15 @@ class IncomingCallActivity : ComponentActivity() {
 
         // The full-screen notification did its job (woke/unlocked the
         // screen); dismiss it now so it doesn't linger once this UI is up.
-        getSystemService(NotificationManager::class.java)?.cancel(callId.hashCode())
+        getSystemService(NotificationManager::class.java)?.cancel(IncomingCallAlerts.notificationId(callId))
+
+        // Close if the call stops ringing some other way: the caller hung up, it
+        // was answered or declined in the app, or it timed out.
+        lifecycleScope.launch {
+            CallSignalingRepository().listenForCallStatus(callId).collect { call ->
+                if (!answeredHere && call != null && call.status != CallRequestStatus.RINGING.name) finish()
+            }
+        }
 
         setContent {
             VastuTalksTheme {
@@ -92,7 +100,11 @@ class IncomingCallActivity : ComponentActivity() {
         }
     }
 
+    /** Accepted on this screen, so the status changing to ACCEPTED shouldn't close it. */
+    private var answeredHere = false
+
     private fun acceptCall(callId: String, channelName: String, callType: String) {
+        answeredHere = true
         val signalingRepository = CallSignalingRepository()
         val tokenRepository = TokenRepository()
 

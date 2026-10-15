@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,9 +33,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.vastutalks.app.call.IncomingCallAlerts
 import com.vastutalks.app.data.call.AgoraCallManager
 import com.vastutalks.app.data.call.CallConnectionState
 import com.vastutalks.app.data.call.TokenRepository
@@ -108,7 +109,6 @@ fun HomeScreen(
     onExpertCardClick: (expertId: String, expertName: String) -> Unit = { _, _ -> },
     onCallAgent: () -> Unit = {},
     onChatAgent: () -> Unit = {},
-    onScanRoom: () -> Unit = {},
     onCreatePost: () -> Unit = {},
     onOpenPost: (postId: String) -> Unit = {},
     onChatExpert: (expertId: String, expertName: String) -> Unit = { _, _ -> },
@@ -137,6 +137,7 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(SurfaceLight)
+            .navigationBarsPadding()
     ) {
         // Top bar
         Row(
@@ -251,7 +252,6 @@ fun HomeScreen(
                 onExpertCardClick = onExpertCardClick,
                 onCallAgent = onCallAgent,
                 onChatAgent = onChatAgent,
-                onScanRoom = onScanRoom,
                 onChatExpert = onChatExpert
             )
         }
@@ -285,6 +285,36 @@ private fun ExpertDashboard(
     var isAccepting by remember { mutableStateOf(false) }
     var acceptError by remember { mutableStateOf<String?>(null) }
     var acceptedCall by remember { mutableStateOf<CallRequest?>(null) }
+
+    // While this screen is in front it shows and rings for incoming calls itself,
+    // so the push notification doesn't ring as well (see IncomingCallAlerts).
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> IncomingCallAlerts.inAppRingerVisible = true
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> IncomingCallAlerts.inAppRingerVisible = false
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            IncomingCallAlerts.inAppRingerVisible = false
+            IncomingCallAlerts.stopRinging(context)
+        }
+    }
+    // One ringer: the card rings while it's waiting for an answer, and takes over
+    // from the push notification if that arrived first.
+    val ringingCallId = incomingCall?.callId?.takeIf { !isAccepting }
+    LaunchedEffect(ringingCallId) {
+        if (ringingCallId != null) {
+            IncomingCallAlerts.cancelNotification(context, ringingCallId)
+            IncomingCallAlerts.startRinging(context)
+        } else {
+            IncomingCallAlerts.stopRinging(context)
+        }
+    }
 
     val connectionState by AgoraCallManager.connectionState.collectAsState()
     LaunchedEffect(connectionState) {
@@ -502,7 +532,6 @@ private fun NormalUserHome(
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
     onCallAgent: () -> Unit,
     onChatAgent: () -> Unit,
-    onScanRoom: () -> Unit,
     onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.EXPERTS) }
@@ -552,7 +581,7 @@ private fun NormalUserHome(
         Box(modifier = Modifier.height(16.dp))
 
         when (selectedTab) {
-            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, now, expertsError, onCallExpert, onExpertCardClick, onCallAgent, onChatAgent, onScanRoom, onChatExpert)
+            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, now, expertsError, onCallExpert, onExpertCardClick, onCallAgent, onChatAgent, onChatExpert)
             HomeTab.POSTS -> PostsFeed(
                 posts,
                 likedPostIds = likedPostIds,
@@ -602,39 +631,6 @@ private fun AnanyaCard(onChat: () -> Unit, onCall: () -> Unit) {
 }
 
 @Composable
-private fun AgentCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(VastuPrimary.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
-            Text(subtitle, fontSize = 11.sp, color = TextSecondary)
-        }
-    }
-}
-
-@Composable
 private fun HomeTabChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
@@ -662,7 +658,6 @@ private fun ExpertsTabContent(
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
     onCallAgent: () -> Unit,
     onChatAgent: () -> Unit,
-    onScanRoom: () -> Unit,
     onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     Column {
@@ -697,14 +692,8 @@ private fun ExpertsTabContent(
         // Ananya, the AI Vastu agent — always available, no human
         // expert needs to be online. Chat or call her (the call can
         // switch between audio and video).
+        // The room scan lives in her chat.
         AnanyaCard(onChat = onChatAgent, onCall = onCallAgent)
-        Box(modifier = Modifier.height(10.dp))
-        AgentCard(
-            icon = Icons.Outlined.Explore,
-            title = "Scan a room — Vastu check",
-            subtitle = "Photograph each wall with the compass; get a score and what to fix, marked on your photos",
-            onClick = onScanRoom
-        )
 
         Box(modifier = Modifier.height(20.dp))
 
@@ -846,13 +835,12 @@ private fun LiveExpertCard(
                 )
             }
             Box(modifier = Modifier.height(10.dp))
-            // The three ways to reach an expert. All work while they're offline
-            // (a call rings their phone through a push); only a call they're
-            // already on blocks a new one.
+            // Chat or call. Both work while they're offline (a call rings their
+            // phone through a push); only a call they're already on blocks a new
+            // one. A call starts as audio; either side can turn the camera on.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CallChip(Icons.AutoMirrored.Outlined.Chat, "Chat", enabled = true, modifier = Modifier.weight(1f), onClick = onChat)
-                CallChip(Icons.Filled.Call, "Audio", enabled = !expert.isBusyAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.AUDIO) }
-                CallChip(Icons.Filled.Videocam, "Video", enabled = !expert.isBusyAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.VIDEO) }
+                CallChip(Icons.Filled.Call, "Call", enabled = !expert.isBusyAt(now), modifier = Modifier.weight(1f)) { onCall(CallType.AUDIO) }
             }
         }
     }

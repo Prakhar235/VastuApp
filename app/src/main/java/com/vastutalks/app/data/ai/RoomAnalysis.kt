@@ -72,6 +72,35 @@ data class RoomAnalysis(
         return ImageMarkup.draw(wall.bitmap, shapes)
     }
 
+    /** The read in the same JSON shape the model returns, so [parse] reads it back (for saving it with the chat). */
+    fun toJson(): String = JSONObject()
+        .put("room", room)
+        .put("score", score)
+        .put("verdict", verdict)
+        .put("summary", summary)
+        .put("findings", org.json.JSONArray().apply {
+            findings.forEach { f ->
+                put(
+                    JSONObject()
+                        .put("title", f.title)
+                        .put("object", f.objectName)
+                        .put("severity", f.severity.name.lowercase())
+                        .put("photo", f.photo)
+                        .put("mark", when (val m = f.mark) {
+                            is BoardShape.Rect -> JSONObject().put("type", "rect").put("x", m.x).put("y", m.y).put("w", m.w).put("h", m.h)
+                            is BoardShape.Circle -> JSONObject().put("type", "circle").put("x", m.x).put("y", m.y).put("r", m.r)
+                            else -> JSONObject.NULL
+                        })
+                        .put("zone", f.zone?.name ?: JSONObject.NULL)
+                        .put("better_zone", f.betterZone?.name ?: JSONObject.NULL)
+                        .put("why", f.why)
+                        .put("remedies", org.json.JSONArray(f.remedies))
+                        .put("checks", org.json.JSONArray(f.checks))
+                )
+            }
+        })
+        .toString()
+
     /** The whole read as text, for the chat and for her memory of it. */
     fun asText(): String = buildString {
         append("$room · ${tr("Vastu score", "वास्तु स्कोर")} $score/100 ($verdict). $summary")

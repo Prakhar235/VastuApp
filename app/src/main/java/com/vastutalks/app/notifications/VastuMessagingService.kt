@@ -17,6 +17,7 @@ import com.vastutalks.app.data.repository.ChatRepository
 import com.vastutalks.app.POST_ACTIVITY_CHANNEL_ID
 import com.vastutalks.app.R
 import com.vastutalks.app.call.IncomingCallActivity
+import com.vastutalks.app.call.IncomingCallAlerts
 import com.vastutalks.app.data.repository.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +64,8 @@ class VastuMessagingService : FirebaseMessagingService() {
             return
         }
         if (data["type"] != "incoming_call") return
+        // The expert's Home is open and already showing (and ringing for) this call.
+        if (IncomingCallAlerts.inAppRingerVisible) return
 
         val callId = data["callId"] ?: return
         val callerName = data["callerName"] ?: "Someone"
@@ -159,6 +162,8 @@ class VastuMessagingService : FirebaseMessagingService() {
             .setContentIntent(fullScreenPendingIntent)
             .setAutoCancel(true)
             .setOngoing(true)
+            // Stop ringing once the caller has given up (LiveCallingScreen's ring timeout).
+            .setTimeoutAfter(45_000L)
             .build()
 
         // Without this permission (Android 13+, requested from HomeScreen
@@ -170,6 +175,6 @@ class VastuMessagingService : FirebaseMessagingService() {
             return
         }
 
-        NotificationManagerCompat.from(this).notify(callId.hashCode(), notification)
+        NotificationManagerCompat.from(this).notify(IncomingCallAlerts.notificationId(callId), notification)
     }
 }

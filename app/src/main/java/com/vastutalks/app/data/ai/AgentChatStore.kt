@@ -43,7 +43,8 @@ class AgentChatStore(context: Context) {
                 text = m.optString("text"),
                 sender = if (m.optString("sender") == ChatSender.USER.name) ChatSender.USER else ChatSender.AGENT,
                 image = m.optString("image").takeIf { it.isNotBlank() }
-                    ?.let { BitmapFactory.decodeFile(File(dir, it).path)?.asImageBitmap() }
+                    ?.let { BitmapFactory.decodeFile(File(dir, it).path)?.asImageBitmap() },
+                hasReport = m.optBoolean("report")
             )
         }
         val markable = (0 until json.optInt("markableCount")).mapNotNull { i ->
@@ -72,6 +73,7 @@ class AgentChatStore(context: Context) {
                             .put("text", m.text)
                             .put("sender", m.sender.name)
                             .put("image", imageName ?: "")
+                            .put("report", m.hasReport)
                     )
                 }
                 val json = JSONObject().put("messages", list).put("history", history).put("markableCount", markableCount)
@@ -96,12 +98,45 @@ class AgentChatStore(context: Context) {
         }
     }
 
+    /** Saves a room scan's full report (photos, directions and the read) for the message [messageId]. */
+    fun saveReport(messageId: Int, walls: List<WallPhoto>, analysis: RoomAnalysis) {
+        io.execute {
+            runCatching {
+                val reportDir = File(dir, reportName(messageId)).apply { mkdirs() }
+                val wallList = JSONArray()
+                walls.forEachIndexed { i, wall ->
+                    File(reportDir, "wall_$i.jpg").outputStream().use { wall.bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                    wallList.put(JSONObject().put("degrees", wall.facing.degrees.toDouble()).put("source", wall.facing.source.name))
+                }
+                File(reportDir, "report.json").writeText(
+                    JSONObject().put("walls", wallList).put("analysis", JSONObject(analysis.toJson())).toString()
+                )
+            }.onFailure { Log.w(TAG, "Couldn't save the room report", it) }
+        }
+    }
+
+    /** The room report saved for [messageId], or null. Call off the main thread. */
+    fun loadReport(messageId: Int): RoomScanHandoff.Scan? = runCatching {
+        val reportDir = File(dir, reportName(messageId))
+        val json = JSONObject(File(reportDir, "report.json").readText())
+        val wallList = json.getJSONArray("walls")
+        val walls = (0 until wallList.length()).map { i ->
+            val w = wallList.getJSONObject(i)
+            WallPhoto(
+                BitmapFactory.decodeFile(File(reportDir, "wall_$i.jpg").path) ?: error("Missing photo $i"),
+                PhotoFacing(w.getDouble("degrees").toFloat(), PhotoFacing.Source.valueOf(w.getString("source")))
+            )
+        }
+        RoomScanHandoff.Scan(walls, RoomAnalysis.parse(json.getJSONObject("analysis").toString(), walls.size))
+    }.onFailure { Log.w(TAG, "Couldn't load the room report", it) }.getOrNull()
+
     /** Deletes the saved chat, for a fresh start. */
     fun clear() {
         io.execute { dir.deleteRecursively() }
     }
 
     private fun markableName(i: Int) = "markable_$i.jpg"
+    private fun reportName(messageId: Int) = "report_$messageId"
 
     private companion object {
         const val TAG = "AgentChatStore"

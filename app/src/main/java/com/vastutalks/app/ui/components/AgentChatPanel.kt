@@ -70,7 +70,9 @@ data class AgentChatMessage(
     val id: Int,
     val text: String,
     val sender: ChatSender = ChatSender.AGENT,
-    val image: ImageBitmap? = null
+    val image: ImageBitmap? = null,
+    /** Set on a room scan's report; the full report is saved with the chat (AgentChatStore.loadReport). */
+    val hasReport: Boolean = false
 )
 
 /** Shared tones for the agent call's dark surfaces. */
@@ -135,6 +137,8 @@ fun AgentChatPage(
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
     media: ShareMediaActions? = null,
+    /** Opens the full room report saved with [AgentChatMessage.hasReport]. */
+    onOpenReport: (AgentChatMessage) -> Unit = {},
     emptyHint: String = tr("Everything you and $agentName say will show up here.", "आप और $agentName जो भी कहेंगे, वह यहाँ दिखेगा।")
 ) {
     val listState = rememberLazyListState()
@@ -163,7 +167,7 @@ fun AgentChatPage(
                 }
             }
             items(messages, key = { it.id }) { message ->
-                if (message.sender == ChatSender.AGENT) AgentMessage(message, agentName, avatarSeed) else UserMessage(message)
+                if (message.sender == ChatSender.AGENT) AgentMessage(message, agentName, avatarSeed, onOpenReport = { onOpenReport(message) }) else UserMessage(message)
             }
             if (isAgentTyping) {
                 item { AgentMessage(AgentChatMessage(-1, "…"), agentName, avatarSeed, isTyping = true) }
@@ -239,7 +243,7 @@ fun AgentChatPage(
 }
 
 @Composable
-private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSeed: String, isTyping: Boolean = false) {
+private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSeed: String, isTyping: Boolean = false, onOpenReport: () -> Unit = {}) {
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
         AsyncImage(
             model = "https://i.pravatar.cc/300?u=$avatarSeed",
@@ -261,6 +265,20 @@ private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSee
                 } else {
                     MessageBody(message)
                 }
+            }
+            if (message.hasReport) {
+                Text(
+                    tr("View full report", "पूरी रिपोर्ट देखें"),
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(VastuPrimary)
+                        .clickable(onClick = onOpenReport)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
         }
     }

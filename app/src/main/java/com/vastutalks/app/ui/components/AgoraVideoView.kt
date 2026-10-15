@@ -17,6 +17,9 @@ fun LocalVideoView(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
         factory = { context ->
             AgoraCallManager.createRendererView(context).also { view ->
+                // Both videos are SurfaceViews, which ignore Compose's drawing order:
+                // without this the full-screen remote video covers this small preview.
+                view.setZOrderMediaOverlay(true)
                 AgoraCallManager.setupLocalVideo(view)
             }
         }

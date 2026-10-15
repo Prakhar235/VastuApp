@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,7 +48,7 @@ fun ChatsListScreen(onBack: () -> Unit, onOpenChat: (otherUid: String, otherName
     val chats by remember { repository.listenMyChats() }.collectAsState(initial = null)
     val myUid = repository.myUid.orEmpty()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceLight).statusBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(SurfaceLight).statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically

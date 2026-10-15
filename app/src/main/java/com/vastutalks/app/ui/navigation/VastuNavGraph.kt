@@ -151,7 +151,6 @@ fun VastuNavGraph(
                 },
                 onCallAgent = { navController.navigate(Routes.agentCalling(video = false)) },
                 onChatAgent = { navController.navigate(Routes.AGENT_CHAT) },
-                onScanRoom = { navController.navigate(Routes.ROOM_SCAN) },
                 onCreatePost = { navController.navigate(Routes.CREATE_POST) },
                 onOpenPost = { navController.navigate(Routes.postDetail(it)) },
                 onChatExpert = { uid, name -> navController.navigate(Routes.conversation(uid, name)) },
@@ -168,8 +167,8 @@ fun VastuNavGraph(
         ) {
             com.vastutalks.app.ui.screens.chat.ConversationScreen(
                 onBack = { navController.popBackStack() },
-                onCall = { uid, name, video ->
-                    navController.navigate(Routes.liveCalling(uid, name, if (video) CallType.VIDEO.name else CallType.AUDIO.name))
+                onCall = { uid, name ->
+                    navController.navigate(Routes.liveCalling(uid, name, CallType.AUDIO.name))
                 }
             )
         }
@@ -205,8 +204,19 @@ fun VastuNavGraph(
         composable(Routes.AGENT_CHAT) {
             AgentChatScreen(
                 onBack = { navController.popBackStack() },
-                onCall = { video -> navController.navigate(Routes.agentCalling(video)) },
-                onScanRoom = { navController.navigate(Routes.ROOM_SCAN) }
+                onCall = { navController.navigate(Routes.agentCalling(video = false)) },
+                onScanRoom = { navController.navigate(Routes.ROOM_SCAN) },
+                onOpenReport = { navController.navigate(Routes.roomReport(it)) }
+            )
+        }
+
+        composable(
+            route = Routes.ROOM_REPORT,
+            arguments = listOf(navArgument("messageId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            com.vastutalks.app.ui.screens.scan.RoomReportScreen(
+                messageId = backStackEntry.arguments?.getInt("messageId") ?: -1,
+                onClose = { navController.popBackStack() }
             )
         }
 
@@ -251,11 +261,8 @@ fun VastuNavGraph(
                 expertUid = expertUid,
                 expertName = expertName,
                 onBack = { navController.popBackStack() },
-                onAudioCall = {
+                onCall = {
                     navController.navigate(Routes.liveCalling(expertUid, expertName, CallType.AUDIO.name))
-                },
-                onVideoCall = {
-                    navController.navigate(Routes.liveCalling(expertUid, expertName, CallType.VIDEO.name))
                 },
                 onChat = { navController.navigate(Routes.conversation(expertUid, expertName)) }
             )

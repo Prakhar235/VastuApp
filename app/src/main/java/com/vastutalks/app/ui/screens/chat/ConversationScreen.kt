@@ -29,7 +29,6 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -164,7 +163,10 @@ class ConversationViewModel(savedState: SavedStateHandle) : ViewModel() {
 @Composable
 fun ConversationScreen(
     onBack: () -> Unit,
-    onCall: (expertUid: String, expertName: String, video: Boolean) -> Unit,
+    /** Starts as audio; either side can turn the camera on during the call. */
+    onCall: (expertUid: String, expertName: String) -> Unit,
+    /** False when the chat is opened from inside a call (no call button then). */
+    showCallButton: Boolean = true,
     viewModel: ConversationViewModel = viewModel()
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -206,13 +208,10 @@ fun ConversationScreen(
                 Text(viewModel.otherName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))
                 viewModel.otherExpert?.let { Text(it.displaySpecialty, fontSize = 12.sp, color = VastuPrimary) }
             }
-            // Chatting with an expert: the other two ways to reach them.
-            viewModel.otherExpert?.let { expert ->
-                IconButton(onClick = { onCall(expert.uid, expert.name, false) }) {
-                    Icon(Icons.Filled.Call, contentDescription = "Audio call", tint = VastuPrimary)
-                }
-                IconButton(onClick = { onCall(expert.uid, expert.name, true) }) {
-                    Icon(Icons.Filled.Videocam, contentDescription = "Video call", tint = VastuPrimary)
+            // Chatting with an expert: the other way to reach them.
+            viewModel.otherExpert?.takeIf { showCallButton }?.let { expert ->
+                IconButton(onClick = { onCall(expert.uid, expert.name) }) {
+                    Icon(Icons.Filled.Call, contentDescription = "Call", tint = VastuPrimary)
                 }
             }
         }

@@ -27,6 +27,10 @@ class RoomScanViewModel : ViewModel() {
 
     private val agent = VastuAgent()
     private var analyzeJob: Job? = null
+    /** The current analysis is already in the chat. */
+    private var sentToChat = false
+    /** Photos of a saved report being viewed again (they aren't in [photos]). */
+    private var savedWalls: List<WallPhoto>? = null
 
     var stage by mutableStateOf(Stage.CAPTURE)
         private set
@@ -46,7 +50,15 @@ class RoomScanViewModel : ViewModel() {
     val currentWall: CompassDirection get() = WALLS[step]
 
     /** The photos sent for analysis, in wall order; findings refer to them by index. */
-    val walls: List<WallPhoto> get() = WALLS.mapNotNull { photos[it] }
+    val walls: List<WallPhoto> get() = savedWalls ?: WALLS.mapNotNull { photos[it] }
+
+    /** Shows a report saved with the chat, as it was. */
+    fun showSaved(scan: RoomScanHandoff.Scan) {
+        savedWalls = scan.walls
+        analysis = scan.analysis
+        sentToChat = true
+        stage = Stage.RESULT
+    }
 
     fun goToWall(direction: CompassDirection) {
         step = WALLS.indexOf(direction)
@@ -77,6 +89,9 @@ class RoomScanViewModel : ViewModel() {
         analyzeJob = viewModelScope.launch {
             val result = agent.analyzeRoom(walls)
             analysis = result
+            sentToChat = false
+            // Straight into the chat (and saved there), whether or not they ask about it.
+            handOffToChat()
             stage = if (result != null) Stage.RESULT else Stage.FAILED
         }
     }
@@ -101,16 +116,18 @@ class RoomScanViewModel : ViewModel() {
         analyzeJob?.cancel()
         photos.clear()
         skipped.clear()
+        savedWalls = null
         analysis = null
         mapFinding = null
         step = 0
         stage = Stage.CAPTURE
     }
 
-    /** Sends the scan to the chat with Ananya; false if there's nothing to send. */
+    /** Sends the scan to the chat with Ananya (once); false if there's nothing to send. */
     fun handOffToChat(): Boolean {
         val result = analysis ?: return false
-        RoomScanHandoff.send(RoomScanHandoff.Scan(walls, result))
+        if (!sentToChat) RoomScanHandoff.send(RoomScanHandoff.Scan(walls, result))
+        sentToChat = true
         return true
     }
 

@@ -35,6 +35,9 @@ object Routes {
     const val AGENT_CHAT = "agent_chat"
     /** Guided room scan: a photo of each wall, then Ananya's read of the room. */
     const val ROOM_SCAN = "room_scan"
+    /** A room report saved in the chat with Ananya, opened from its message. */
+    const val ROOM_REPORT = "room_report/{messageId}"
+    fun roomReport(messageId: Int) = "room_report/$messageId"
 
     fun liveCalling(calleeUid: String, calleeName: String, callType: String) =
         "live_calling/${java.net.URLEncoder.encode(calleeUid, "UTF-8")}/${java.net.URLEncoder.encode(calleeName, "UTF-8")}/$callType"

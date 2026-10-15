@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,7 +21,6 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Icon
@@ -58,8 +58,8 @@ fun RealExpertProfileScreen(
     expertUid: String,
     expertName: String,
     onBack: () -> Unit,
-    onAudioCall: () -> Unit,
-    onVideoCall: () -> Unit,
+    /** Starts as audio; either side can turn the camera on during the call. */
+    onCall: () -> Unit,
     onChat: () -> Unit
 ) {
     val extras = remember(expertUid) { expertDisplayExtrasFor(expertUid) } // only for the hidden price
@@ -80,6 +80,7 @@ fun RealExpertProfileScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(SurfaceLight)
+            .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier
@@ -187,8 +188,7 @@ fun RealExpertProfileScreen(
         ) {
             // Chat and calls both work while the expert is offline.
             CallButton(Icons.AutoMirrored.Outlined.Chat, "Chat", filled = true, enabled = true, onClick = onChat, modifier = Modifier.weight(1f))
-            CallButton(Icons.Filled.Call, "Audio", filled = false, enabled = canCall, onClick = onAudioCall, modifier = Modifier.weight(1f))
-            CallButton(Icons.Filled.Videocam, "Video", filled = false, enabled = canCall, onClick = onVideoCall, modifier = Modifier.weight(1f))
+            CallButton(Icons.Filled.Call, "Call", filled = false, enabled = canCall, onClick = onCall, modifier = Modifier.weight(1f))
         }
     }
 }

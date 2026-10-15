@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -506,3 +507,34 @@ private fun signedDelta(heading: Float, target: Float): Float = ((heading - targ
 
 /** Within this many degrees of the wall's direction counts as facing it. */
 private const val ON_TARGET = 20f
+
+/**
+ * A room report saved with the chat with Ananya, opened again from its
+ * message. Same screens as a fresh scan; "Scan again" starts a new one.
+ */
+@Composable
+fun RoomReportScreen(
+    messageId: Int,
+    onClose: () -> Unit,
+    viewModel: RoomScanViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    LaunchedEffect(messageId) {
+        if (viewModel.analysis != null) return@LaunchedEffect
+        val scan = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.vastutalks.app.data.ai.AgentChatStore(context).loadReport(messageId)
+        }
+        if (scan != null) {
+            viewModel.showSaved(scan)
+        } else {
+            android.widget.Toast.makeText(context, tr("Couldn't open this report.", "यह रिपोर्ट नहीं खुल सकी।"), android.widget.Toast.LENGTH_SHORT).show()
+            onClose()
+        }
+    }
+    if (viewModel.analysis == null && viewModel.stage == RoomScanViewModel.Stage.CAPTURE) {
+        DarkScreenStatusBar()
+        Box(modifier = Modifier.fillMaxSize().background(CallTones.Ink))
+    } else {
+        RoomScanScreen(onClose = onClose, onAskAgent = onClose, viewModel = viewModel)
+    }
+}
