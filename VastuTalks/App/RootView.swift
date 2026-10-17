@@ -49,8 +49,8 @@ struct RootView: View {
                 expertUid: uid,
                 expertName: name,
                 onBack: { router.pop() },
-                onChatNow: { /* No chat feature yet — same as Android. */ },
-                onVideoCall: { router.push(.liveCalling(calleeUid: uid, calleeName: name, callType: .video)) }
+                onCall: { router.push(.liveCalling(calleeUid: uid, calleeName: name, callType: .audio)) },
+                onChat: { router.push(.conversation(otherUid: uid, otherName: name)) }
             )
         case .liveCalling(let calleeUid, let calleeName, let callType):
             LiveCallingView(
@@ -68,13 +68,53 @@ struct RootView: View {
                                durationSeconds: duration, startTimeMillis: startMillis)
                 router.popToRoot()
             }
-        case .agentCalling:
+        case .agentCalling(let video):
             AgentCallingView(
-                onConnected: { router.replaceTop(with: .agentInCall) },
+                isVideo: video,
+                onConnected: { router.replaceTop(with: .agentInCall(video: video)) },
                 onCancel: { router.pop() }
             )
-        case .agentInCall:
-            AgentInCallView(onEndCall: { router.popToRoot() })
+        case .agentInCall(let video):
+            AgentInCallView(startWithVideo: video, onEndCall: { router.popToRoot() })
+        case .agentChat:
+            AgentChatView(
+                onBack: { router.pop() },
+                onCall: { router.push(.agentCalling(video: false)) },
+                onScanRoom: { router.push(.roomScan) },
+                onOpenReport: { router.push(.roomReport(messageId: $0)) }
+            )
+        case .roomScan:
+            NewRoomScanView(
+                onClose: { router.pop() },
+                onAskAgent: {
+                    // Back to the chat if the scan was started from it, else open the chat in place of the scan.
+                    if !router.popBack(to: .agentChat) { router.replaceTop(with: .agentChat) }
+                }
+            )
+        case .roomReport(let messageId):
+            RoomReportView(messageId: messageId, onClose: { router.pop() })
+        case .conversation(let otherUid, let otherName):
+            ConversationView(
+                otherUid: otherUid,
+                otherName: otherName,
+                onBack: { router.pop() },
+                onCall: { uid, name in router.push(.liveCalling(calleeUid: uid, calleeName: name, callType: .audio)) }
+            )
+        case .chats:
+            ChatsListView(
+                onBack: { router.pop() },
+                onOpenChat: { uid, name in router.push(.conversation(otherUid: uid, otherName: name)) }
+            )
+        case .postDetail(let postId):
+            PostDetailView(
+                postId: postId,
+                onBack: { router.pop() },
+                onAuthorTap: { uid, name in router.push(.expertProfile(uid: uid, name: name)) }
+            )
+        case .notifications:
+            NotificationsView(onBack: { router.pop() }, onOpenPost: { router.push(.postDetail(postId: $0)) })
+        case .createPost:
+            CreatePostView(onDone: { router.pop() })
         }
     }
 }

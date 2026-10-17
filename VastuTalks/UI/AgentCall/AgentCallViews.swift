@@ -5,9 +5,11 @@ import SwiftUI
 /// Firestore signaling or Agora token — she's always available, so she
 /// "picks up" after a short ring.
 struct AgentCallingView: View {
+    var isVideo = false
     let onConnected: () -> Void
     let onCancel: () -> Void
 
+    @ObservedObject private var language = AgentLanguagePref.shared
     @State private var pulse = false
     @State private var cancelled = false
 
@@ -24,9 +26,10 @@ struct AgentCallingView: View {
                 Spacer().frame(height: 28)
                 Text(AnanyaAgent.name).font(.vt(20)).foregroundColor(.white)
                 Spacer().frame(height: 6)
-                Text("Calling…").font(.vt(14)).foregroundColor(.white.opacity(0.7))
+                Text(isVideo ? tr("Video calling…", "वीडियो कॉल हो रही है…") : tr("Calling…", "कॉल हो रही है…"))
+                    .font(.vt(14)).foregroundColor(.white.opacity(0.7))
                 Spacer().frame(height: 6)
-                Text("AI Vastu expert").font(.vt(11)).foregroundColor(.white.opacity(0.4))
+                Text(tr("AI Vastu expert", "AI वास्तु विशेषज्ञ")).font(.vt(11)).foregroundColor(.white.opacity(0.4))
                 Spacer().frame(height: 64)
                 Button {
                     cancelled = true
@@ -38,6 +41,7 @@ struct AgentCallingView: View {
                 .accessibilityLabel("Cancel")
             }
         }
+        .darkScreenStatusBar()
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
@@ -54,14 +58,14 @@ enum AgentCallStatus {
 
     var label: String {
         switch self {
-        case .joining: return "Joining…"
-        case .listening: return "Listening"
-        case .hearing: return "Hearing you"
-        case .thinking: return "Thinking"
-        case .speaking: return "Speaking"
-        case .muted: return "You're muted"
-        case .noMic: return "Mic access needed"
-        case .textOnly: return "Chat to talk"
+        case .joining: return tr("Joining…", "जुड़ रही हैं…")
+        case .listening: return tr("Listening", "सुन रही हैं")
+        case .hearing: return tr("Hearing you", "आपको सुन रही हैं")
+        case .thinking: return tr("Thinking", "सोच रही हैं")
+        case .speaking: return tr("Speaking", "बोल रही हैं")
+        case .muted: return tr("You're muted", "आप म्यूट हैं")
+        case .noMic: return tr("Mic access needed", "माइक की अनुमति चाहिए")
+        case .textOnly: return tr("Chat to talk", "बात करने के लिए लिखें")
         }
     }
 
@@ -78,12 +82,14 @@ enum AgentCallStatus {
 
 /// Runs the call with Ananya: she greets the caller, then waits as long
 /// as it takes for them to speak (CallerListener) and answers out loud
-/// (AgentVoice). The caller can also type, sketch on the shared board,
-/// or share a photo/video of a room. Everything said, every board
-/// snapshot, photo and video is saved as the call goes (AgentCallRecorder).
+/// (AgentVoice). The caller can also type, or share a photo or video of a
+/// room — she answers with her suggestions marked on it. On video, every
+/// turn carries what the camera shows (and which way it faces), so she sees
+/// what the caller sees. Everything said, every photo and video is saved
+/// as the call goes (AgentCallRecorder).
 @MainActor
 final class AgentCallViewModel: ObservableObject {
-    @Published var page = AgentCallPage.board
+    @Published var page = VastuAgent.boardEnabled ? AgentCallPage.board : .chat
     @Published var unread = 0
     @Published private(set) var elapsedSeconds = 0
     @Published var isMuted = false { didSet { updateMic() } }
@@ -99,14 +105,17 @@ final class AgentCallViewModel: ObservableObject {
     @Published private(set) var isHearing = false
     @Published var photoToReview: CapturedPhoto? { didSet { updateMic() } }
     @Published var videoToReview: CapturedVideo? { didSet { updateMic() } }
-    /// The camera picker is showing.
-    @Published var cameraMode: CameraMode? { didSet { updateMic() } }
+    /// The camera or gallery picker is showing.
+    @Published var mediaSource: MediaSource? { didSet { updateMic() } }
     @Published var isAppActive = true { didSet { updateMic() } }
-    @Published var isProcessingMedia = false
+    /// The caller's camera is live on screen and goes along with each turn.
+    @Published private(set) var isVideo = false
     @Published var toast: String?
 
     let board = WhiteboardModel()
     let agent = VastuAgent()
+    let viewfinder = ViewfinderModel()
+    let heading = CameraHeading()
     private let voice = AgentVoice()
     private let listener = CallerListener()
     private let recorder = AgentCallRecorder()
@@ -131,9 +140,7 @@ final class AgentCallViewModel: ObservableObject {
         return .listening
     }
 
-    var cost: Double { Double(elapsedSeconds) / 60 * (Double(AnanyaAgent.pricePerSession) / 60) }
-
-    func start() {
+    func start(withVideo: Bool) {
         guard !started else { return }
         started = true
 
@@ -152,6 +159,7 @@ final class AgentCallViewModel: ObservableObject {
         session.requestRecordPermission { granted in
             DispatchQueue.main.async { self.hasMicPermission = granted }
         }
+        if withVideo { toggleVideo() }
 
         // Ananya picks up and greets the caller.
         askAgent { [agent] in
@@ -177,6 +185,7 @@ final class AgentCallViewModel: ObservableObject {
         listener.stop()
         voice.stop()
         turnChain?.cancel()
+        heading.stop()
         if board.hasUnsavedChanges { saveBoard(who: "Board", caption: "Board at end of call") }
         recorder.finish()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -187,11 +196,30 @@ final class AgentCallViewModel: ObservableObject {
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 DispatchQueue.main.async {
                     self.hasMicPermission = granted
-                    if !granted { self.showToast("Turn on microphone access for Vastu Talks in Settings to talk to Ananya.") }
+                    if !granted { self.toast = tr("Turn on microphone access for Vastu Talks in Settings to talk to Ananya.", "अनन्या से बात करने के लिए सेटिंग्स में Vastu Talks के लिए माइक चालू करें।") }
                 }
             }
         } else {
             isMuted.toggle()
+        }
+    }
+
+    /// Switches between audio and video, asking for the camera the first time.
+    func toggleVideo() {
+        if isVideo {
+            isVideo = false
+            heading.stop()
+            return
+        }
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            DispatchQueue.main.async {
+                if granted {
+                    self.isVideo = true
+                    self.heading.start()
+                } else {
+                    self.toast = tr("Camera permission is needed for video.", "वीडियो के लिए कैमरा की अनुमति चाहिए।")
+                }
+            }
         }
     }
 
@@ -207,7 +235,7 @@ final class AgentCallViewModel: ObservableObject {
     /// Ananya thinks or speaks (so she doesn't hear herself) and when muted.
     private var callerTurn: Bool {
         hasGreeted && hasMicPermission && agent.isConfigured && !isMuted && !isSpeaking && !isAgentTyping &&
-            !isTranscribing && isAppActive && photoToReview == nil && videoToReview == nil && cameraMode == nil && !finished
+            !isTranscribing && isAppActive && photoToReview == nil && videoToReview == nil && mediaSource == nil && !finished
     }
 
     private func updateMic() {
@@ -244,8 +272,12 @@ final class AgentCallViewModel: ObservableObject {
     private func postAgentTurn(_ turn: AgentTurn) {
         guard !finished else { return }
         voice.speak(turn.say)
-        addMessage(turn.say, sender: .agent)
-        recorder.logLine(AnanyaAgent.name, turn.say)
+        addMessage(turn.chatText, sender: .agent, image: turn.markedPhoto)
+        recorder.logLine(AnanyaAgent.name, turn.chatText)
+        if let marked = turn.markedPhoto {
+            recorder.savePhoto(marked, caption: "Marked up the photo", who: AnanyaAgent.name)
+            page = .chat // her marks are on the photo in the chat
+        }
         if let drawing = turn.board {
             board.showAgentDrawing(drawing)
             page = .board // she's explaining on the board — bring it into view
@@ -269,7 +301,12 @@ final class AgentCallViewModel: ObservableObject {
     func userSaid(_ text: String) {
         addMessage(text, sender: .user)
         recorder.logLine("You", text)
-        askAgent { [agent] in await agent.reply(text) }
+        if isVideo, let view = viewfinder.snapshot() {
+            let facing = heading.degrees.map { PhotoFacing(degrees: $0, source: .compass) }
+            askAgent { [agent] in await agent.replyWithView(text, view: view, facing: facing) }
+        } else {
+            askAgent { [agent] in await agent.reply(text) }
+        }
     }
 
     func sendTyped() {
@@ -304,60 +341,22 @@ final class AgentCallViewModel: ObservableObject {
 
     // MARK: Photos & videos
 
-    func openCamera(_ mode: CameraMode) {
-        guard CameraPicker.isAvailable else {
-            showToast("No camera found on this device.")
-            return
-        }
-        AVCaptureDevice.requestAccess(for: .video) { granted in
-            DispatchQueue.main.async {
-                if granted {
-                    self.cameraMode = mode
-                } else {
-                    self.showToast(mode == .photo ? "Camera access is needed to take a photo." : "Camera access is needed to record a video.")
-                }
-            }
-        }
+    var mediaActions: ShareMediaActions {
+        ShareMediaActions(
+            takePhoto: { [weak self] in self?.openMedia(.camera) },
+            pickPhoto: { [weak self] in self?.openMedia(.gallery) },
+            recordVideo: { [weak self] in self?.openMedia(.video) }
+        )
     }
 
-    func cameraTookPhoto(_ image: UIImage, metadata: [String: Any]?) {
-        cameraMode = nil
-        isProcessingMedia = true
-        Task.detached(priority: .userInitiated) {
-            let photo = MediaLoader.photo(image, metadata: metadata)
-            await MainActor.run {
-                self.isProcessingMedia = false
-                self.photoToReview = photo
-            }
-        }
-    }
-
-    func cameraRecordedVideo(_ file: URL) {
-        cameraMode = nil
-        isProcessingMedia = true
-        Task.detached(priority: .userInitiated) {
-            let video = MediaLoader.video(file)
-            await MainActor.run {
-                self.isProcessingMedia = false
-                if let video = video {
-                    self.videoToReview = video
-                } else {
-                    try? FileManager.default.removeItem(at: file)
-                    self.showToast("Couldn't read that video — try again.")
-                }
-            }
-        }
-    }
-
-    func retakePhoto() {
-        photoToReview = nil
-        openCamera(.photo)
+    func openMedia(_ source: MediaSource) {
+        MediaPermissions.openCamera(source, open: { self.mediaSource = $0 }, onError: { self.toast = $0 })
     }
 
     func discardVideo(retake: Bool) {
         if let file = videoToReview?.file { try? FileManager.default.removeItem(at: file) }
         videoToReview = nil
-        if retake { openCamera(.video) }
+        if retake { openMedia(.video) }
     }
 
     /// Posts a shared photo or video in the chat as a thumbnail with its caption.
@@ -366,11 +365,15 @@ final class AgentCallViewModel: ObservableObject {
         page = .chat // show it with her answer; a drawing would bring the board back
     }
 
+    private var defaultQuestion: String {
+        tr("What does Vastu say about this space?", "इस जगह के बारे में वास्तु क्या कहता है?")
+    }
+
     func sendPhoto(question: String, facing: PhotoFacing?) {
         guard let photo = photoToReview else { return }
         photoToReview = nil
-        let caption = (question.isEmpty ? "What does Vastu say about this space?" : question) +
-            (facing.map { " · camera facing \($0.direction.label)" } ?? "")
+        let caption = (question.isEmpty ? defaultQuestion : question) +
+            (facing.map { tr(" · camera facing \($0.direction.label)", " · कैमरा \($0.direction.label) की ओर") } ?? "")
         recorder.savePhoto(photo.image, caption: "Shared a photo: \(caption)")
         postMedia(photo.image, caption: caption)
         askAgent { [agent] in await agent.reviewPhoto(photo.image, question: question, facing: facing) }
@@ -380,7 +383,7 @@ final class AgentCallViewModel: ObservableObject {
         guard let video = videoToReview else { return }
         videoToReview = nil
         let seconds = max(1, Int(video.durationSeconds))
-        let caption = "Video (\(seconds)s): " + (question.isEmpty ? "What does Vastu say about this space?" : question) +
+        let caption = "Video (\(seconds)s): " + (question.isEmpty ? defaultQuestion : question) +
             (facing.map { " · started facing \($0.direction.label)" } ?? "")
         recorder.saveVideo(video.file, caption: "Shared a video: \(caption)")
         postMedia(video.frames[0], caption: caption)
@@ -388,23 +391,17 @@ final class AgentCallViewModel: ObservableObject {
             await agent.reviewVideo(frames: video.frames, durationSeconds: seconds, question: question, facing: facing)
         }
     }
-
-    func showToast(_ message: String) {
-        toast = message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-            if self?.toast == message { self?.toast = nil }
-        }
-    }
 }
 
-/// The call with the AI agent Ananya, once she picks up. Two pages,
-/// switched from the header: the Board (default) — a shared whiteboard
-/// both of them draw on, with live captions — and the Chat, the full
-/// conversation plus a box to type.
+/// The call with the AI agent Ananya, once she picks up: her status and the
+/// call time, the caller's live camera on video, and the conversation (the
+/// shared whiteboard comes back as a second page when VastuAgent.boardEnabled).
 struct AgentInCallView: View {
+    var startWithVideo = false
     let onEndCall: () -> Void
 
     @StateObject private var vm = AgentCallViewModel()
+    @ObservedObject private var language = AgentLanguagePref.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -414,13 +411,20 @@ struct AgentInCallView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                CallHeader(status: vm.status, isSpeaking: vm.isSpeaking,
-                           timer: String(format: "%02d:%02d", vm.elapsedSeconds / 60, vm.elapsedSeconds % 60),
-                           cost: String(format: "₹%.0f", vm.cost))
+                CallHeader(status: vm.status, isSpeaking: vm.isSpeaking, isVideo: vm.isVideo,
+                           timer: String(format: "%02d:%02d", vm.elapsedSeconds / 60, vm.elapsedSeconds % 60))
 
-                PageSwitch(page: vm.page, unread: vm.unread, onSelect: { vm.selectPage($0) })
-                    .padding(.top, 4)
-                    .padding(.bottom, 12)
+                if vm.isVideo {
+                    LiveCameraPanel(viewfinder: vm.viewfinder, heading: vm.heading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                }
+
+                if VastuAgent.boardEnabled {
+                    PageSwitch(page: vm.page, unread: vm.unread, onSelect: { vm.selectPage($0) })
+                        .padding(.top, 4)
+                        .padding(.bottom, 12)
+                }
 
                 ZStack {
                     if vm.page == .board {
@@ -440,15 +444,10 @@ struct AgentInCallView: View {
                 CallControls(vm: vm, onEndCall: onEndCall)
             }
 
-            if vm.isProcessingMedia {
-                Color.black.opacity(0.4).ignoresSafeArea()
-                ProgressView().tint(.white).scaleEffect(1.4)
-            }
-
             if let photo = vm.photoToReview {
                 CaptureReviewSheet(
                     frames: [photo.image], exifHeading: photo.exifHeading, isVideo: false, agentName: AnanyaAgent.firstName,
-                    onRetake: { vm.retakePhoto() }, onDismiss: { vm.photoToReview = nil },
+                    onRetake: { vm.photoToReview = nil; vm.openMedia(.camera) }, onDismiss: { vm.photoToReview = nil },
                     onSend: { vm.sendPhoto(question: $0, facing: $1) }
                 )
                 .transition(.opacity)
@@ -462,40 +461,42 @@ struct AgentInCallView: View {
                 )
                 .transition(.opacity)
             }
-
-            if let toast = vm.toast {
-                VStack {
-                    Spacer()
-                    Text(toast).font(.vt(13, .medium)).foregroundColor(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(Capsule().fill(Color.black.opacity(0.8)))
-                        .padding(.bottom, 120)
-                        .padding(.horizontal, 24)
-                }
-                .transition(.opacity)
-                .allowsHitTesting(false)
-            }
         }
-        .fullScreenCover(item: $vm.cameraMode) { mode in
-            CameraPicker(
-                mode: mode,
-                onPhoto: { vm.cameraTookPhoto($0, metadata: $1) },
-                onVideo: { vm.cameraRecordedVideo($0) },
-                onCancel: { vm.cameraMode = nil }
-            )
-            .ignoresSafeArea()
-        }
-        .onAppear { vm.start() }
+        .toast($vm.toast)
+        .mediaPicker($vm.mediaSource, onPhoto: { vm.photoToReview = $0 }, onVideo: { vm.videoToReview = $0 }, onError: { vm.toast = $0 })
+        .darkScreenStatusBar()
+        .onAppear { vm.start(withVideo: startWithVideo) }
         .onDisappear { vm.finish() }
         .onChange(of: scenePhase) { vm.isAppActive = $0 == .active }
     }
 }
 
+/// The caller's camera during a video call, with which way it faces.
+private struct LiveCameraPanel: View {
+    let viewfinder: ViewfinderModel
+    @ObservedObject var heading: CameraHeading
+
+    var body: some View {
+        CameraViewfinder(model: viewfinder)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(alignment: .topLeading) {
+                Text(heading.degrees.map { tr("Camera facing ", "कैमरा की दिशा: ") + CompassDirection.of(degrees: $0).localName }
+                     ?? tr("\(AnanyaAgent.firstName) sees your camera", "\(AnanyaAgent.firstName) आपका कैमरा देख रही हैं"))
+                    .font(.vt(12, .semibold)).foregroundColor(.white)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.55)))
+                    .padding(10)
+            }
+    }
+}
+
+/// Ananya, what she's doing and the call time on one line, and the reply-language switch.
 private struct CallHeader: View {
     let status: AgentCallStatus
     let isSpeaking: Bool
+    let isVideo: Bool
     let timer: String
-    let cost: String
 
     var body: some View {
         HStack(spacing: 12) {
@@ -506,24 +507,17 @@ private struct CallHeader: View {
                 .overlay(Circle().stroke(isSpeaking ? Color.vastuPrimary : .clear, lineWidth: 2))
                 .animation(.easeInOut(duration: 0.25), value: isSpeaking)
             VStack(alignment: .leading, spacing: 2) {
-                Text(AnanyaAgent.name).font(.vt(16, .semibold)).foregroundColor(CallTones.textPrimary)
+                Text(AnanyaAgent.name).font(.vt(16, .semibold)).foregroundColor(CallTones.textPrimary).lineLimit(1)
                 HStack(spacing: 6) {
                     StatusDot(status: status)
-                    Text(status.label).font(.vt(12)).foregroundColor(CallTones.textMuted)
+                    Text("\(status.label) · \(isVideo ? tr("Video", "वीडियो") : tr("Audio", "ऑडियो")) · \(timer)")
+                        .font(.vt(12)).foregroundColor(CallTones.textMuted).lineLimit(1)
                 }
             }
-            Spacer()
-            HStack(spacing: 8) {
-                Text(timer).font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundColor(CallTones.textPrimary)
-                Circle().fill(CallTones.textMuted).frame(width: 3, height: 3)
-                Text(cost).font(.vt(12, .medium)).foregroundColor(CallTones.textMuted)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Capsule().fill(CallTones.surface))
-            .overlay(Capsule().stroke(CallTones.hairline, lineWidth: 1))
+            Spacer(minLength: 8)
+            LanguageSwitch()
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
 }
@@ -679,7 +673,7 @@ private struct CallControls: View {
     @State private var halo = false
 
     var body: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 18) {
             ZStack {
                 if vm.isListening && !vm.isMuted {
                     Circle()
@@ -690,15 +684,13 @@ private struct CallControls: View {
                         .onAppear { halo = true }
                         .onDisappear { halo = false }
                 }
-                Button { vm.toggleMic() } label: {
-                    Circle().fill(vm.isMuted ? CallTones.textPrimary : CallTones.surfaceRaised).frame(width: 56, height: 56)
-                        .overlay(Circle().stroke(CallTones.hairline, lineWidth: 1))
-                        .overlay(Image(systemName: vm.isMuted ? "mic.slash.fill" : "mic.fill").font(.system(size: 21))
-                            .foregroundColor(vm.isMuted ? CallTones.ink : CallTones.textPrimary))
-                }
-                .accessibilityLabel(vm.isMuted ? "Unmute" : "Mute")
+                roundButton(vm.isMuted ? "mic.slash.fill" : "mic.fill", active: vm.isMuted) { vm.toggleMic() }
+                    .accessibilityLabel(vm.isMuted ? "Unmute" : "Mute")
             }
             .frame(width: 64, height: 64)
+
+            roundButton(vm.isVideo ? "video.fill" : "video.slash.fill", active: vm.isVideo) { vm.toggleVideo() }
+                .accessibilityLabel(vm.isVideo ? tr("Switch to audio call", "ऑडियो कॉल पर जाएँ") : tr("Switch to video call", "वीडियो कॉल पर जाएँ"))
 
             Button(action: onEndCall) {
                 Circle().fill(Color.danger).frame(width: 64, height: 64)
@@ -706,10 +698,7 @@ private struct CallControls: View {
             }
             .accessibilityLabel("End call")
 
-            Menu {
-                Button { vm.openCamera(.photo) } label: { Label("Take a photo", systemImage: "camera") }
-                Button { vm.openCamera(.video) } label: { Label("Record a video (up to 30s)", systemImage: "video") }
-            } label: {
+            ShareMediaMenu(actions: vm.mediaActions) {
                 Circle().fill(CallTones.surfaceRaised).frame(width: 56, height: 56)
                     .overlay(Circle().stroke(CallTones.hairline, lineWidth: 1))
                     .overlay(Image(systemName: "camera").font(.system(size: 21)).foregroundColor(CallTones.textPrimary))
@@ -719,5 +708,15 @@ private struct CallControls: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 18)
         .padding(.bottom, 14)
+    }
+
+    /// Light when on (muted / camera on), dark otherwise.
+    private func roundButton(_ icon: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Circle().fill(active ? CallTones.textPrimary : CallTones.surfaceRaised).frame(width: 56, height: 56)
+                .overlay(Circle().stroke(CallTones.hairline, lineWidth: 1))
+                .overlay(Image(systemName: icon).font(.system(size: 21))
+                    .foregroundColor(active ? CallTones.ink : CallTones.textPrimary))
+        }
     }
 }

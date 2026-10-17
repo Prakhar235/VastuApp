@@ -12,11 +12,16 @@ import Foundation
 /// as the Android app (gravity + magnetic field → East/North axes).
 final class CameraHeading: ObservableObject {
     @Published private(set) var degrees: Double?
+    /// The phone is held up straight (camera looking roughly level, not at
+    /// the floor or ceiling), as wanted for photographing a wall.
+    @Published private(set) var isUpright = false
 
     private let motion = CMMotionManager()
     private var east = 0.0
     private var north = 0.0
     private static let smoothing = 0.15
+    /// sin of ~20°: how far the camera may tip up or down and still count as level.
+    private static let uprightLimit = 0.34
 
     func start() {
         guard motion.isDeviceMotionAvailable,
@@ -57,6 +62,9 @@ final class CameraHeading: ObservableObject {
             north += (cos(angle) - north) * Self.smoothing
         }
         let result = atan2(east, north) * 180 / .pi
+        // Gravity along the screen's normal: near 0 when the phone stands upright.
+        let upright = abs(data.gravity.z) < Self.uprightLimit
+        if upright != isUpright { isUpright = upright }
         degrees = (result + 360).truncatingRemainder(dividingBy: 360)
     }
 

@@ -1,3 +1,4 @@
+import AudioToolbox
 import FirebaseMessaging
 import SwiftUI
 import UserNotifications
@@ -33,6 +34,42 @@ struct IncomingCallPush: Identifiable, Equatable {
     }
 }
 
+/// Makes sure an incoming call rings in one place only. While the expert's
+/// Home is on screen it shows the call itself (and rings), so the push
+/// banner is skipped, or removed if it got there first; anywhere else the
+/// push notification does the ringing.
+enum IncomingCallAlerts {
+    /// True while the expert's Home is on screen and showing incoming calls itself.
+    static var inAppRingerVisible = false
+
+    private static var ringTimer: Timer?
+
+    /// Rings and vibrates (repeating) for the in-app incoming call card.
+    static func startRinging() {
+        guard ringTimer == nil else { return }
+        let ring = {
+            AudioServicesPlayAlertSound(SystemSoundID(1005))
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+        ring()
+        ringTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in ring() }
+    }
+
+    static func stopRinging() {
+        ringTimer?.invalidate()
+        ringTimer = nil
+    }
+
+    /// Removes the "Incoming call" banner for `callId` from Notification Centre.
+    static func clearNotification(callId: String) {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { delivered in
+            let ids = delivered.filter { $0.request.content.userInfo["callId"] as? String == callId }.map(\.request.identifier)
+            center.removeDeliveredNotifications(withIdentifiers: ids)
+        }
+    }
+}
+
 final class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -58,17 +95,43 @@ final class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNU
         Task { try? await UserRepository().saveFcmToken(token) }
     }
 
-    /// Show the "Incoming call" banner (with sound) even while the app is open.
+    /// Pushes that arrive while the app is open: shown as a banner, except an
+    /// incoming call the expert's Home is already showing, and a message in
+    /// the chat that's open on screen.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .list, .sound])
+        let userInfo = notification.request.content.userInfo
+        switch userInfo["type"] as? String {
+        case "incoming_call" where IncomingCallAlerts.inAppRingerVisible:
+            completionHandler([])
+        case "chat" where (userInfo["chatId"] as? String) == ChatRepository.openChatId:
+            completionHandler([])
+        default:
+            completionHandler([.banner, .list, .sound])
+        }
     }
 
-    /// Tapping the banner opens the full-screen incoming-call screen.
+    /// Tapping a notification: an incoming call opens the full-screen call
+    /// screen; a chat message opens that chat; a like or comment opens the post.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        if let call = IncomingCallPush(userInfo: response.notification.request.content.userInfo) {
-            DispatchQueue.main.async { AppRouter.shared.incomingCall = call }
+        let userInfo = response.notification.request.content.userInfo
+        DispatchQueue.main.async {
+            let router = AppRouter.shared
+            switch userInfo["type"] as? String {
+            case "incoming_call":
+                if let call = IncomingCallPush(userInfo: userInfo) { router.incomingCall = call }
+            case "chat":
+                if let uid = userInfo["senderUid"] as? String {
+                    router.open(fromNotification: .conversation(otherUid: uid, otherName: userInfo["senderName"] as? String ?? ""))
+                }
+            case "post_activity":
+                if let postId = userInfo["postId"] as? String {
+                    router.open(fromNotification: .postDetail(postId: postId))
+                }
+            default:
+                break
+            }
         }
         completionHandler()
     }

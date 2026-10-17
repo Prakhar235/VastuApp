@@ -7,7 +7,11 @@ enum CompassDirection: Int, CaseIterable {
     var short: String { ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][rawValue] }
     var label: String { ["North", "North-East", "East", "South-East", "South", "South-West", "West", "North-West"][rawValue] }
     var vastuName: String { ["Uttar", "Ishan", "Purva", "Agneya", "Dakshin", "Nairutya", "Paschim", "Vayavya"][rawValue] }
+    var hindi: String { ["उत्तर", "उत्तर-पूर्व", "पूर्व", "दक्षिण-पूर्व", "दक्षिण", "दक्षिण-पश्चिम", "पश्चिम", "उत्तर-पश्चिम"][rawValue] }
     var degrees: Double { Double(rawValue) * 45 }
+
+    /// The name in the chosen app language.
+    var localName: String { tr(label, hindi) }
 
     /// The direction `steps` eighth-turns clockwise from this one (negative = anticlockwise).
     func turn(_ steps: Int) -> CompassDirection {
@@ -25,13 +29,13 @@ enum CompassDirection: Int, CaseIterable {
 /// Which way the camera was pointing when a photo was taken, in degrees
 /// clockwise from (magnetic) North, and how we know.
 struct PhotoFacing: Equatable {
-    enum Source {
+    enum Source: String {
         /// Written into the photo's metadata by the camera (GPS ImgDirection).
-        case photo
+        case photo = "PHOTO"
         /// Read from the phone's compass while the caller reviewed the photo.
-        case compass
+        case compass = "COMPASS"
         /// Picked by the caller.
-        case caller
+        case caller = "CALLER"
     }
 
     let degrees: Double

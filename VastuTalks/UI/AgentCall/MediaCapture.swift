@@ -1,8 +1,10 @@
 import AVFoundation
+import ImageIO
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// A photo from the camera, plus the compass heading it was taken at if the camera recorded one.
+/// A photo from the camera or gallery, plus the compass heading it was taken at if the camera recorded one.
 struct CapturedPhoto: Identifiable {
     let id = UUID()
     let image: UIImage
@@ -33,6 +35,14 @@ enum MediaLoader {
             image: image.scaledDown(toMaxSide: maxSide),
             exifHeading: heading.flatMap { (0...360).contains($0) ? $0 : nil }
         )
+    }
+
+    /// A photo file's bytes (from the gallery), with its saved compass heading if any.
+    static func photo(data: Data, maxSide: CGFloat = 1600) -> CapturedPhoto? {
+        guard let image = UIImage(data: data) else { return nil }
+        let metadata = CGImageSourceCreateWithData(data as CFData, nil)
+            .flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [String: Any] }
+        return photo(image, metadata: metadata, maxSide: maxSide)
     }
 
     /// Pulls evenly spaced frames: about one every 3 seconds, at least 3 and at most `maxFrames`.
@@ -112,8 +122,112 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
+/// The photo library, for picking one existing photo. Needs no permission:
+/// the picker hands over just the chosen image.
+struct PhotoLibraryPicker: UIViewControllerRepresentable {
+    /// Gets nil if nothing was picked or the photo couldn't be read.
+    let onPicked: (CapturedPhoto?) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPicked) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        private let onPicked: (CapturedPhoto?) -> Void
+        init(_ onPicked: @escaping (CapturedPhoto?) -> Void) { self.onPicked = onPicked }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider else { return onPicked(nil) }
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                let photo = data.flatMap { MediaLoader.photo(data: $0) }
+                DispatchQueue.main.async { self.onPicked(photo) }
+            }
+        }
+    }
+}
+
+/// Which of the system pickers is up: the camera (photo or video) or the gallery.
+enum MediaSource: String, Identifiable {
+    case camera, video, gallery
+    var id: String { rawValue }
+}
+
+extension View {
+    /// Shows the camera or photo library while `source` is set, and hands back
+    /// what was taken or picked. A sheet rather than a full-screen cover, so the
+    /// screen underneath (a call) doesn't get onDisappear and hang up.
+    func mediaPicker(_ source: Binding<MediaSource?>, onPhoto: @escaping (CapturedPhoto) -> Void,
+                     onVideo: @escaping (CapturedVideo) -> Void = { _ in }, onError: @escaping (String) -> Void) -> some View {
+        sheet(item: source) { kind in
+            Group {
+                switch kind {
+                case .gallery:
+                    PhotoLibraryPicker { photo in
+                        source.wrappedValue = nil
+                        if let photo = photo { onPhoto(photo) }
+                    }
+                case .camera, .video:
+                    CameraPicker(
+                        mode: kind == .video ? .video : .photo,
+                        onPhoto: { image, metadata in
+                            source.wrappedValue = nil
+                            onPhoto(MediaLoader.photo(image, metadata: metadata))
+                        },
+                        onVideo: { file in
+                            source.wrappedValue = nil
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                let video = MediaLoader.video(file)
+                                DispatchQueue.main.async {
+                                    if let video = video {
+                                        onVideo(video)
+                                    } else {
+                                        try? FileManager.default.removeItem(at: file)
+                                        onError(tr("Couldn't read that video — try again.", "यह वीडियो पढ़ा नहीं जा सका — फिर से कोशिश करें।"))
+                                    }
+                                }
+                            }
+                        },
+                        onCancel: { source.wrappedValue = nil }
+                    )
+                }
+            }
+            .ignoresSafeArea()
+        }
+    }
+}
+
+enum MediaPermissions {
+    /// Opens the camera if there is one and access is (or gets) granted; otherwise reports why not.
+    static func openCamera(_ source: MediaSource, open: @escaping (MediaSource) -> Void, onError: @escaping (String) -> Void) {
+        guard source == .gallery || CameraPicker.isAvailable else {
+            return onError(tr("No camera found on this device.", "इस फ़ोन में कैमरा नहीं मिला।"))
+        }
+        guard source != .gallery else { return open(source) }
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            DispatchQueue.main.async {
+                if granted {
+                    open(source)
+                } else {
+                    onError(source == .video
+                            ? tr("Camera access is needed to record a video.", "वीडियो रिकॉर्ड करने के लिए कैमरा की अनुमति चाहिए।")
+                            : tr("Camera access is needed to take a photo.", "फ़ोटो लेने के लिए कैमरा की अनुमति चाहिए।"))
+                }
+            }
+        }
+    }
+}
+
 /// Full-screen review of a just-taken photo or video: the caller can add
-/// an optional note ("bedroom"), retake it, or send it.
+/// an optional question ("bedroom"), retake it, or send it.
 ///
 /// Also settles which way the camera was facing, so the agent can tell
 /// which direction each thing is in: the heading saved in the photo if
@@ -130,6 +244,7 @@ struct CaptureReviewSheet: View {
     let onSend: (_ question: String, _ facing: PhotoFacing?) -> Void
 
     @StateObject private var heading = CameraHeading()
+    @ObservedObject private var language = AgentLanguagePref.shared
     @State private var question = ""
     @State private var shown = 0
     @State private var picked: CompassDirection?
@@ -149,8 +264,11 @@ struct CaptureReviewSheet: View {
             VStack(spacing: 0) {
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Ask about this space").font(.vt(18, .semibold)).foregroundColor(CallTones.textPrimary)
-                        Text("\(agentName) will suggest Vastu improvements").font(.vt(13, .regular)).foregroundColor(CallTones.textMuted)
+                        Text(isVideo ? tr("Vastu advice on this video", "इस वीडियो पर वास्तु सलाह")
+                             : tr("Vastu advice on this photo", "इस फ़ोटो पर वास्तु सलाह"))
+                            .font(.vt(18, .semibold)).foregroundColor(CallTones.textPrimary)
+                        Text(tr("\(agentName) will mark her Vastu suggestions on the photo", "\(agentName) फ़ोटो पर निशान लगाकर वास्तु सुझाव देंगी"))
+                            .font(.vt(13, .regular)).foregroundColor(CallTones.textMuted)
                     }
                     Spacer()
                     Button(action: onDismiss) {
@@ -189,7 +307,8 @@ struct CaptureReviewSheet: View {
 
                 ZStack(alignment: .leading) {
                     if question.isEmpty {
-                        Text("Add a note (optional) — e.g. “bedroom, door faces east”")
+                        Text(tr("Add a question if you like (optional) — e.g. “bedroom, door in the East”",
+                                "कुछ पूछना हो तो लिखें (ज़रूरी नहीं) — जैसे “बेडरूम, दरवाज़ा पूर्व में”"))
                             .font(.vt(14, .regular)).foregroundColor(CallTones.textMuted)
                     }
                     TextField("", text: $question, axis: .vertical)
@@ -210,14 +329,15 @@ struct CaptureReviewSheet: View {
                     let unit = (geo.size.width - 12) / 2.6
                     HStack(spacing: 12) {
                         Button(action: onRetake) {
-                            Text(isVideo ? "Record again" : "Retake").font(.vt(14, .semibold)).foregroundColor(CallTones.textPrimary)
+                            Text(isVideo ? tr("Record again", "फिर रिकॉर्ड करें") : tr("Retake", "फिर खींचें"))
+                                .font(.vt(14, .semibold)).foregroundColor(CallTones.textPrimary)
                                 .lineLimit(1)
                                 .frame(width: unit, height: 48)
                                 .background(Capsule().fill(CallTones.surface))
                                 .overlay(Capsule().stroke(CallTones.hairline, lineWidth: 1))
                         }
                         Button { onSend(question.trimmingCharacters(in: .whitespacesAndNewlines), facing) } label: {
-                            Text("Ask \(agentName)").font(.vt(14, .semibold)).foregroundColor(.white)
+                            Text(tr("Ask \(agentName)", "\(agentName) से पूछें")).font(.vt(14, .semibold)).foregroundColor(.white)
                                 .lineLimit(1)
                                 .frame(width: unit * 1.6, height: 48)
                                 .background(Capsule().fill(Color.vastuPrimary))
@@ -238,8 +358,9 @@ struct CaptureReviewSheet: View {
     /// "Camera facing East" (or "Started facing East" for a video) plus a row of the eight directions to correct it.
     private var facingPicker: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(facing.map { "\(isVideo ? "Started facing" : "Camera facing") \($0.direction.label) (\($0.direction.vastuName))" }
-                 ?? (isVideo ? "Which way did the video start facing?" : "Which way was the camera facing?"))
+            Text(facing.map { "\(isVideo ? tr("Started facing", "शुरुआत की दिशा:") : tr("Camera facing", "कैमरे की दिशा:")) \($0.direction.label) (\($0.direction.vastuName))" }
+                 ?? (isVideo ? tr("Which way did the video start facing?", "वीडियो किस दिशा से शुरू हुआ?")
+                     : tr("Which way was the camera facing?", "कैमरा किस दिशा में था?")))
                 .font(.vt(14, .semibold)).foregroundColor(CallTones.textPrimary)
             Text(facingHint).font(.vt(12, .regular)).foregroundColor(CallTones.textMuted)
                 .padding(.top, 2).padding(.bottom, 8)
@@ -267,12 +388,14 @@ struct CaptureReviewSheet: View {
 
     private var facingHint: String {
         switch facing?.source {
-        case .photo: return "From the compass reading saved in the photo · tap to change"
+        case .photo: return tr("From the compass reading saved in the photo · tap to change", "फ़ोटो में सेव कम्पास से · बदलने के लिए टैप करें")
         case .compass:
-            return isVideo ? "Live compass — point your phone where you started recording, or tap a direction"
-                : "Live compass — point your phone the way you took the photo, or tap a direction"
-        case .caller: return "Set by you · tap it again to use the compass"
-        case nil: return "No compass on this phone — tap a direction"
+            return isVideo ? tr("Live compass — point your phone where you started recording, or tap a direction",
+                                "लाइव कम्पास — फ़ोन उस ओर करें जहाँ से रिकॉर्डिंग शुरू की, या दिशा टैप करें")
+                : tr("Live compass — point your phone the way you took the photo, or tap a direction",
+                     "लाइव कम्पास — फ़ोन उस ओर करें जिधर फ़ोटो ली, या दिशा टैप करें")
+        case .caller: return tr("Set by you · tap it again to use the compass", "आपने चुना · कम्पास के लिए फिर टैप करें")
+        case nil: return tr("No compass on this phone — tap a direction", "इस फ़ोन में कम्पास नहीं — दिशा टैप करें")
         }
     }
 }

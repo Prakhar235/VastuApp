@@ -1,28 +1,52 @@
-diff --git a/functions/index.js b/functions/index.js
-index 7910de3..383986d 100644
---- a/functions/index.js
-+++ b/functions/index.js
-@@ -43,9 +43,23 @@ exports.onCallRequestCreated = functions.firestore
-       android: {
-         priority: "high",
-       },
-+      // iOS doesn't show data-only pushes, so iPhones get a visible
-+      // "Incoming call" alert with sound; tapping it opens the app's
-+      // incoming-call screen (the data fields above ride along).
-+      // Android ignores this block.
-       apns: {
-         headers: {
-           "apns-priority": "10",
-+          "apns-push-type": "alert",
+--- a/functions/index.js	2026-10-17 14:08:09.000000000 +0530
++++ b/functions/index.js	2026-10-17 14:08:09.000000000 +0530
+@@ -55,9 +55,23 @@
+     android: {
+       priority: "high",
+     },
++    // iOS doesn't show data-only pushes, so iPhones get a visible
++    // "Incoming call" alert with sound; tapping it opens the app's
++    // incoming-call screen (the data fields above ride along).
++    // Android ignores this block.
+     apns: {
+       headers: {
+         "apns-priority": "10",
++        "apns-push-type": "alert",
++      },
++      payload: {
++        aps: {
++          alert: {
++            title: `Incoming ${call.callType === "VIDEO" ? "video" : "audio"} call`,
++            body: call.callerName || "Someone",
++          },
++          sound: "default",
 +        },
+       },
+     },
+   };
+@@ -163,6 +177,8 @@
+       token: fcmToken,
+       data: { type: "post_activity", postId, title, body },
+       android: { priority: "high" },
++      // iPhones only show pushes with a visible alert; Android ignores this.
++      apns: { payload: { aps: { alert: { title, body }, sound: "default" } } },
+     });
+   } catch (e) {
+     logger.warn(`Couldn't push ${type} notification to ${toUid}`, e);
+@@ -296,6 +312,16 @@
+         body: message.text ? snippet(message.text, 120) : "📷 Photo",
+       },
+       android: { priority: "high" },
++      // iPhones only show pushes with a visible alert; Android ignores this.
++      apns: {
 +        payload: {
 +          aps: {
-+            alert: {
-+              title: `Incoming ${call.callType === "VIDEO" ? "video" : "audio"} call`,
-+              body: call.callerName || "Someone",
-+            },
++            alert: { title: senderName, body: message.text ? snippet(message.text, 120) : "📷 Photo" },
 +            sound: "default",
++            "thread-id": chatId,
 +          },
-         },
-       },
-     };
++        },
++      },
+     });
+   } catch (e) {
+     logger.warn(`Couldn't push chat message to ${recipient}`, e);

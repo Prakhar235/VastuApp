@@ -184,7 +184,7 @@ private func drawShape(_ ctx: inout GraphicsContext, _ shape: BoardShape, fracti
         if fraction >= 1, let label = label {
             drawLabel(&ctx, label, at: CGPoint(x: center.x, y: center.y + radius + unit * 3), color: color, unit: unit)
         }
-    case let .line(x1, y1, x2, y2, arrow, _):
+    case let .line(x1, y1, x2, y2, arrow, _, _):
         let start = px(x1, y1), end = px(x2, y2)
         var path = Path()
         path.move(to: start)

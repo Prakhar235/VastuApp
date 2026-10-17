@@ -74,24 +74,90 @@ final class AuthRepository {
 final class UserRepository {
     private var db: Firestore { Firestore.firestore() }
 
-    /// Called right after account creation. Writes users/{uid} (with role)
-    /// and, for experts, experts/{uid} so they show up in the directory.
-    func createProfileForNewUser(uid: String, name: String, email: String, role: UserRole) async throws {
+    private func myUid() throws -> String {
+        guard let uid = Auth.auth().currentUser?.uid else { throw AppError("No signed-in user") }
+        return uid
+    }
+
+    /// Called right after account creation. Writes users/{uid} (with role,
+    /// phone and photo) and, for experts, an experts/{uid} entry with their
+    /// public details so they show up in the live directory.
+    func createProfileForNewUser(uid: String, name: String, email: String, role: UserRole,
+                                 phone: String, photo: String, expert: ExpertDetails?) async throws {
         let profile: [String: Any] = [
-            "uid": uid, "name": name, "email": email, "role": role.rawValue,
-            "createdAtMillis": millisNow(), "fcmToken": NSNull()
+            "uid": uid, "name": name, "email": email, "phone": phone, "photo": photo,
+            "role": role.rawValue, "createdAtMillis": millisNow(), "fcmToken": NSNull()
         ]
         try await db.collection("users").document(uid).setData(profile)
         if role == .vastuExpert {
-            let expert = ExpertProfile(uid: uid, name: name, email: email, isOnline: true, createdAtMillis: millisNow())
-            try await db.collection("experts").document(uid).setData(expert.dictionary)
+            let entry = ExpertProfile(uid: uid, name: name, email: email, photo: photo, details: expert,
+                                      isOnline: true, createdAtMillis: millisNow())
+            try await db.collection("experts").document(uid).setData(entry.dictionary)
         }
     }
 
     /// Saves this device's push token so calls can ring it.
     func saveFcmToken(_ token: String) async throws {
-        guard let uid = Auth.auth().currentUser?.uid else { throw AppError("No signed-in user") }
-        try await db.collection("users").document(uid).updateData(["fcmToken": token])
+        try await db.collection("users").document(try myUid()).updateData(["fcmToken": token])
+    }
+
+    /// The signed-in user's own profile (name, phone, photo…), live.
+    func listenMyProfile(_ onChange: @escaping (UserProfile?) -> Void) -> ListenerRegistration? {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            onChange(nil)
+            return nil
+        }
+        return db.collection("users").document(uid).addSnapshotListener { snapshot, _ in
+            onChange(snapshot?.data().map(UserProfile.init(data:)))
+        }
+    }
+
+    /// Replaces the signed-in user's photo — on users/{uid}, and on
+    /// experts/{uid} too for experts, so the directory shows the new one.
+    func updatePhoto(_ photo: String) async throws {
+        let uid = try myUid()
+        try await db.collection("users").document(uid).updateData(["photo": photo])
+        let expertDoc = db.collection("experts").document(uid)
+        if try await expertDoc.getDocument().exists {
+            try await expertDoc.updateData(["photo": photo])
+        }
+    }
+
+    /// Expert edits their city, experience and About from their Home.
+    func updateExpertDetails(city: String, experienceYears: Int, bio: String) async throws {
+        try await db.collection("experts").document(try myUid())
+            .updateData(["city": city, "experienceYears": experienceYears, "bio": bio])
+    }
+
+    /// Expert's online/offline switch. The field is "online", which is how
+    /// the Android app's Firestore mapper stores ExpertProfile.isOnline.
+    func setOnline(_ online: Bool) async throws {
+        try await db.collection("experts").document(try myUid()).updateData(["online": online])
+    }
+
+    /// The expert's app checking in (see ExpertProfile.lastSeenMillis);
+    /// `present` false clears it, e.g. on sign-out, so they show offline
+    /// straight away instead of after the timeout.
+    func heartbeat(present: Bool = true) async throws {
+        try await db.collection("experts").document(try myUid())
+            .updateData(["lastSeenMillis": present ? millisNow() : 0])
+    }
+
+    /// Marks the signed-in expert as on a call (or free again), so callers see them as busy.
+    func setInCall(_ inCall: Bool) async throws {
+        try await db.collection("experts").document(try myUid())
+            .updateData(["inCall": inCall, "inCallSinceMillis": millisNow()])
+    }
+
+    func getExpert(_ uid: String) async throws -> ExpertProfile? {
+        try await db.collection("experts").document(uid).getDocument().data().map(ExpertProfile.init(data:))
+    }
+
+    /// Live view of one expert (online, busy, consultations). Gives nil if they have no expert entry.
+    func listenExpert(_ uid: String, _ onChange: @escaping (ExpertProfile?) -> Void) -> ListenerRegistration {
+        db.collection("experts").document(uid).addSnapshotListener { snapshot, _ in
+            onChange(snapshot?.data().map(ExpertProfile.init(data:)))
+        }
     }
 
     /// Called (only from the expert's own device) when a call they were on ends.
@@ -143,6 +209,17 @@ final class CallSignalingRepository {
 
     func updateStatus(callId: String, status: CallRequestStatus) async throws {
         try await collection.document(callId).updateData(["status": status.rawValue])
+    }
+
+    /// Expert side: who placed the call this expert most recently accepted (the one they're on), or nil.
+    func latestAcceptedCallerUid(expertUid: String) async -> String? {
+        let snapshot = try? await collection
+            .whereField("calleeUid", isEqualTo: expertUid)
+            .whereField("status", isEqualTo: CallRequestStatus.accepted.rawValue)
+            .getDocuments()
+        return snapshot?.documents.map { CallRequest(data: $0.data()) }
+            .max { $0.createdAtMillis < $1.createdAtMillis }?
+            .callerUid
     }
 
     /// Expert side: live stream of calls ringing for this uid.

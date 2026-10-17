@@ -7,6 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FF15934D79EE243CF4227565 /* PostViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038A81649776602882E4D03A /* PostViews.swift */; };
+		08A961F14148A7BBA920610A /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */; };
+		B68B36026E22C1C609224387 /* RoomScanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */; };
+		B6D44ABBC789E93CFC4259C7 /* AgentChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D684792F228D759CE7582BA9 /* AgentChatView.swift */; };
+		83B339E3C4395539F30DBFC1 /* CameraViewfinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3272A4901ED1AA22430032F /* CameraViewfinder.swift */; };
+		6682895ACF4A2F3E337C3590 /* AgentChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B370860501F0F00C88E4401 /* AgentChatStore.swift */; };
+		2AF10114402105C3BBB905C9 /* RoomAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */; };
+		50E3F4C79BF80FDFC5240D05 /* ImageMarkup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */; };
+		D3FB2808C847BC11CD34EC0D /* AgentLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */; };
+		9C6DE35B9BFA288C840B3CCE /* SocialRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */; };
+		18FB81F4829610170EF4999D /* Social.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714C7C7C77FF8C57023E56F9 /* Social.swift */; };
 		006871FE484F215481FA6A09 /* CommonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD684531D1557E055D54C61 /* CommonViews.swift */; };
 		05D6B32DCEA319B258508ECE /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */; };
 		0C20F2D39FBFC57E79E86695 /* AgoraCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */; };
@@ -35,13 +46,23 @@
 		B8179FA57145FEC1BA2AD69D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE24A4F3307CC769DFBADA2B /* RootView.swift */; };
 		BC92AC5DC35313DB0EDD1A98 /* LiveCallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19A34620560162EE1E243592 /* LiveCallViews.swift */; };
 		CB35BDFE8D341A7EBF6E1972 /* ProfileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991B87439E997E7A5975944D /* ProfileViews.swift */; };
-		DCFD50C80D2C66BF7E45D137 /* VastuPosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A74693822FFF9C66127EA1 /* VastuPosts.swift */; };
 		EA1B5DD06E61EC1B6CE57424 /* VastuTalksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EEA2B1C8F5DEEAD7E6EFDB /* VastuTalksApp.swift */; };
 		F1D1CF673C29DA44A31D85E2 /* RtcBasic in Frameworks */ = {isa = PBXBuildFile; productRef = 50EC5E8C34A45A90EE0656E0 /* RtcBasic */; };
 		FA83C786404D8F2A7C3925FC /* VastuIllustrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		038A81649776602882E4D03A /* PostViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostViews.swift; sourceTree = "<group>"; };
+		9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViews.swift; sourceTree = "<group>"; };
+		E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanViews.swift; sourceTree = "<group>"; };
+		D684792F228D759CE7582BA9 /* AgentChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatView.swift; sourceTree = "<group>"; };
+		E3272A4901ED1AA22430032F /* CameraViewfinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraViewfinder.swift; sourceTree = "<group>"; };
+		9B370860501F0F00C88E4401 /* AgentChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatStore.swift; sourceTree = "<group>"; };
+		6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAnalysis.swift; sourceTree = "<group>"; };
+		A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMarkup.swift; sourceTree = "<group>"; };
+		20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLanguage.swift; sourceTree = "<group>"; };
+		2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialRepositories.swift; sourceTree = "<group>"; };
+		714C7C7C77FF8C57023E56F9 /* Social.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Social.swift; sourceTree = "<group>"; };
 		0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgoraCallManager.swift; sourceTree = "<group>"; };
 		19A34620560162EE1E243592 /* LiveCallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCallViews.swift; sourceTree = "<group>"; };
 		1AD684531D1557E055D54C61 /* CommonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonViews.swift; sourceTree = "<group>"; };
@@ -51,7 +72,6 @@
 		585D720C6EE2719FE4ABF1FA /* Whiteboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Whiteboard.swift; sourceTree = "<group>"; };
 		61460EDA5C03FE95FB40C9FB /* CameraHeading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraHeading.swift; sourceTree = "<group>"; };
 		62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuIllustrations.swift; sourceTree = "<group>"; };
-		64A74693822FFF9C66127EA1 /* VastuPosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuPosts.swift; sourceTree = "<group>"; };
 		68876E883725F7B396041A57 /* AgentCallRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCallRecorder.swift; sourceTree = "<group>"; };
 		68FA9A1F11E69293803DD17F /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFacing.swift; sourceTree = "<group>"; };
@@ -109,6 +129,10 @@
 		39DB15FAC75DE95C52EAAB74 /* AI */ = {
 			isa = PBXGroup;
 			children = (
+				9B370860501F0F00C88E4401 /* AgentChatStore.swift */,
+				6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */,
+				A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */,
+				20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */,
 				68876E883725F7B396041A57 /* AgentCallRecorder.swift */,
 				7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */,
 				8352EDAEA7B4DD616A208582 /* VastuAgent.swift */,
@@ -127,6 +151,8 @@
 		462CF2523E860426079C4533 /* AgentCall */ = {
 			isa = PBXGroup;
 			children = (
+				D684792F228D759CE7582BA9 /* AgentChatView.swift */,
+				E3272A4901ED1AA22430032F /* CameraViewfinder.swift */,
 				8919A1C92378F4F2EC6CF228 /* AgentCallViews.swift */,
 				9F75B2A212AA1777DCD7F7D1 /* AgentChatPage.swift */,
 				4DBC13ED748C34AE03B7B522 /* AgentVoice.swift */,
@@ -171,6 +197,7 @@
 		A03C7736EAD84BA40337E7C5 /* Repositories */ = {
 			isa = PBXGroup;
 			children = (
+				2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */,
 				844D1555DE45B82B9BE58136 /* Repositories.swift */,
 			);
 			path = Repositories;
@@ -208,6 +235,9 @@
 		B3D060EDD3ECC6A59D53A021 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
+				038A81649776602882E4D03A /* PostViews.swift */,
+				9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */,
+				E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */,
 				C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */,
 				3370906C1D784B64C5126110 /* HomeView.swift */,
 				19A34620560162EE1E243592 /* LiveCallViews.swift */,
@@ -237,8 +267,8 @@
 		F0709B35194D07A00804CBB8 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				714C7C7C77FF8C57023E56F9 /* Social.swift */,
 				9D214035060E4D5EBF0BDCC2 /* Models.swift */,
-				64A74693822FFF9C66127EA1 /* VastuPosts.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -346,6 +376,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FF15934D79EE243CF4227565 /* PostViews.swift in Sources */,
+				08A961F14148A7BBA920610A /* ChatViews.swift in Sources */,
+				B68B36026E22C1C609224387 /* RoomScanViews.swift in Sources */,
+				B6D44ABBC789E93CFC4259C7 /* AgentChatView.swift in Sources */,
+				83B339E3C4395539F30DBFC1 /* CameraViewfinder.swift in Sources */,
+				6682895ACF4A2F3E337C3590 /* AgentChatStore.swift in Sources */,
+				2AF10114402105C3BBB905C9 /* RoomAnalysis.swift in Sources */,
+				50E3F4C79BF80FDFC5240D05 /* ImageMarkup.swift in Sources */,
+				D3FB2808C847BC11CD34EC0D /* AgentLanguage.swift in Sources */,
+				9C6DE35B9BFA288C840B3CCE /* SocialRepositories.swift in Sources */,
+				18FB81F4829610170EF4999D /* Social.swift in Sources */,
 				B1A771A9C82D057BFE691029 /* AgentCallRecorder.swift in Sources */,
 				67B3A4B6F8C588402D3D6F4A /* AgentCallViews.swift in Sources */,
 				7D89C7DC40F34CCB707CC307 /* AgentChatPage.swift in Sources */,
@@ -368,7 +409,6 @@
 				2C2F78B1C4F55C569B94DB8B /* Theme.swift in Sources */,
 				260F1C2F8D7E6CE45A2506A5 /* VastuAgent.swift in Sources */,
 				FA83C786404D8F2A7C3925FC /* VastuIllustrations.swift in Sources */,
-				DCFD50C80D2C66BF7E45D137 /* VastuPosts.swift in Sources */,
 				EA1B5DD06E61EC1B6CE57424 /* VastuTalksApp.swift in Sources */,
 				0D0D845CB9FCBB866B8E1401 /* Whiteboard.swift in Sources */,
 			);

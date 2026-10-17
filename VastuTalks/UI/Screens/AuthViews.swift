@@ -32,7 +32,8 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
-    func signUp(fullName: String, email: String, password: String, role: UserRole, onSuccess: @escaping () -> Void) {
+    func signUp(fullName: String, email: String, password: String, role: UserRole, phone: String,
+                photo: UIImage?, expert: ExpertDetails?, onSuccess: @escaping () -> Void) {
         isLoading = true
         errorMessage = nil
         Task {
@@ -46,8 +47,11 @@ final class AuthViewModel: ObservableObject {
             }
             // The account exists even if this profile write fails, so don't block on it —
             // worst case they land on Home with the default role.
+            let encodedPhoto = await Task.detached { photo.map(ProfilePhotos.encode) ?? "" }.value
             do {
-                try await userRepository.createProfileForNewUser(uid: user.uid, name: fullName, email: email, role: role)
+                try await userRepository.createProfileForNewUser(
+                    uid: user.uid, name: fullName.trimmingCharacters(in: .whitespaces), email: email.trimmingCharacters(in: .whitespaces),
+                    role: role, phone: phone.trimmingCharacters(in: .whitespaces), photo: encodedPhoto, expert: expert)
             } catch {
                 errorMessage = "Account created, but saving your profile failed: \(error.localizedDescription)"
             }
@@ -163,10 +167,42 @@ struct CreateAccountView: View {
     @State private var confirmPassword = ""
     @State private var agreedToTerms = false
     @State private var role = UserRole.normalUser
+    @State private var photo: UIImage?
+    // Expert-only: the details shown on their card and profile.
+    @State private var specialty = ""
+    @State private var experience = ""
+    @State private var city = ""
+    @State private var bio = ""
 
-    private var canSubmit: Bool {
-        !fullName.trimmingCharacters(in: .whitespaces).isEmpty && !email.trimmingCharacters(in: .whitespaces).isEmpty &&
-            !mobile.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty && password == confirmPassword && agreedToTerms
+    /// The specialties an expert can pick at sign-up (shown on their card and profile).
+    private static let specialties = [
+        "Residential Vastu", "Commercial Vastu", "Industrial Vastu",
+        "Interior Vastu", "Plot & Land Vastu", "Spiritual Consultation"
+    ]
+
+    private var isExpert: Bool { role == .vastuExpert }
+
+    /// Everything still missing, so the user knows why the button is disabled.
+    private var missing: [String] {
+        var list: [String] = []
+        func blank(_ s: String) -> Bool { s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if isExpert && photo == nil { list.append("profile photo") }
+        if blank(fullName) { list.append("name") }
+        if !email.contains("@") { list.append("email") }
+        if mobile.filter(\.isNumber).count < 10 { list.append("10-digit mobile number") }
+        if isExpert {
+            if specialty.isEmpty { list.append("specialty") }
+            if Int(experience) == nil { list.append("years of experience") }
+            if blank(city) { list.append("city") }
+            if blank(bio) { list.append("about you") }
+        }
+        if password.count < 6 {
+            list.append("password (6+ characters)")
+        } else if password != confirmPassword {
+            list.append("matching passwords")
+        }
+        if !agreedToTerms { list.append("agree to the Terms") }
+        return list
     }
 
     var body: some View {
@@ -184,17 +220,27 @@ struct CreateAccountView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        label("I am a...")
-                        SegmentTabs(
-                            options: [(UserRole.normalUser, "Normal User", "person.fill"),
-                                      (UserRole.vastuExpert, "Vastu Expert", "headphones")],
-                            selection: $role,
-                            height: 48, background: Color(hex: 0xF3F1F7), cornerRadius: 12, innerRadius: 9, fontSize: 13
-                        )
-                        if role == .vastuExpert {
-                            Text("You'll be listed for normal users to call, and won't see the expert directory yourself.")
-                                .font(.vt(12)).foregroundColor(.vastuPrimary).padding(.top, 6)
+                        Group {
+                            label("I am a...")
+                            SegmentTabs(
+                                options: [(UserRole.normalUser, "Normal User", "person.fill"),
+                                          (UserRole.vastuExpert, "Vastu Expert", "headphones")],
+                                selection: $role,
+                                height: 48, background: Color(hex: 0xF3F1F7), cornerRadius: 12, innerRadius: 9, fontSize: 13
+                            )
+                            if role == .vastuExpert {
+                                Text("You'll be listed for normal users to call, and won't see the expert directory yourself.")
+                                    .font(.vt(12)).foregroundColor(.vastuPrimary).padding(.top, 6)
+                            }
                         }
+
+                        VStack(spacing: 8) {
+                            ProfilePhotoEditor(photo: "", name: fullName, size: 96, picked: photo) { photo = $0 }
+                            Text(photo != nil ? "Tap to change photo" : isExpert ? "Add your profile photo (required)" : "Add a profile photo (optional)")
+                                .font(.vt(12)).foregroundColor(photo == nil && isExpert ? .vastuPrimary : .textSecondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 20)
 
                         Group {
                             label("Full Name", top: 16)
@@ -205,6 +251,9 @@ struct CreateAccountView: View {
                             label("Mobile Number", top: 16)
                             VastuTextField(text: $mobile, placeholder: "+91 98765 43210", icon: "phone.fill",
                                            keyboard: .phonePad, contentType: .telephoneNumber)
+                        }
+                        if isExpert { expertFields }
+                        Group {
                             label("Password", top: 16)
                             VastuTextField(text: $password, placeholder: "Create password", icon: "lock.fill",
                                            isPassword: true, contentType: .newPassword)
@@ -233,18 +282,29 @@ struct CreateAccountView: View {
                         .padding(.top, 6)
                         .padding(.leading, -12)
 
-                        if let error = viewModel.errorMessage {
-                            Spacer().frame(height: 16)
-                            Text(error).font(.vt(13)).foregroundColor(.errorText)
-                        }
+                        Group {
+                            if let error = viewModel.errorMessage {
+                                Spacer().frame(height: 16)
+                                Text(error).font(.vt(13)).foregroundColor(.errorText)
+                            }
 
-                        Spacer().frame(height: 24)
-                        GradientButton(text: "Create Account", enabled: canSubmit, isLoading: viewModel.isLoading) {
-                            hideKeyboard()
-                            viewModel.signUp(fullName: fullName, email: email, password: password, role: role,
-                                             onSuccess: onAccountCreated)
+                            Spacer().frame(height: 24)
+                            GradientButton(text: "Create Account", enabled: missing.isEmpty, isLoading: viewModel.isLoading) {
+                                hideKeyboard()
+                                viewModel.signUp(
+                                    fullName: fullName, email: email, password: password, role: role, phone: mobile, photo: photo,
+                                    expert: isExpert ? ExpertDetails(specialty: specialty, experienceYears: Int(experience) ?? 0,
+                                                                     city: city.trimmingCharacters(in: .whitespaces),
+                                                                     bio: bio.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
+                                    onSuccess: onAccountCreated
+                                )
+                            }
+                            if !missing.isEmpty {
+                                Text("Still needed: " + missing.joined(separator: ", "))
+                                    .font(.vt(12, .medium)).foregroundColor(.textSecondary).padding(.top, 8)
+                            }
+                            Spacer().frame(height: 24)
                         }
-                        Spacer().frame(height: 24)
                     }
                     .padding(.horizontal, 24)
                     .padding(.vertical, 28)
@@ -259,6 +319,31 @@ struct CreateAccountView: View {
 
     private func label(_ text: String, top: CGFloat = 0) -> some View {
         Text(text).font(.vt(13)).foregroundColor(.vastuCharcoal).padding(.top, top).padding(.bottom, 8)
+    }
+
+    @ViewBuilder private var expertFields: some View {
+        label("Specialty", top: 16)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(Self.specialties, id: \.self) { option in
+                let selected = specialty == option
+                Button { specialty = option } label: {
+                    Text(option).font(.vt(13)).foregroundColor(selected ? .white : .textSecondary)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .background(Capsule().fill(selected ? Color.vastuPrimary : Color(hex: 0xF3F1F7)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        label("Years of Experience", top: 16)
+        VastuTextField(text: $experience, placeholder: "e.g. 10", icon: "rosette", keyboard: .numberPad)
+            .onChange(of: experience) { experience = String($0.filter(\.isNumber).prefix(2)) }
+        label("City", top: 16)
+        VastuTextField(text: $city, placeholder: "e.g. Mumbai", icon: "mappin.circle.fill", contentType: .addressCity)
+        label("About You", top: 16)
+        MultilineField(text: $bio, placeholder: "Your experience, approach and what you help clients with", maxLength: 400)
     }
 }
 

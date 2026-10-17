@@ -23,7 +23,7 @@ enum CallRequestStatus: String {
 
 func millisNow() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
 
-private func int64(_ value: Any?) -> Int64 { (value as? NSNumber)?.int64Value ?? 0 }
+func int64(_ value: Any?) -> Int64 { (value as? NSNumber)?.int64Value ?? 0 }
 
 /// Stored at callRequests/{callId} — this is the whole real-time
 /// signaling mechanism. The caller writes one of these; the callee's
@@ -77,23 +77,82 @@ struct CallRequest: Equatable {
     var type: CallType { CallType(rawValue: callType) ?? .audio }
 }
 
+/// Stored at users/{uid}.
+struct UserProfile: Equatable {
+    var uid = ""
+    var name = ""
+    var email = ""
+    var phone = ""
+    /// Profile photo as a small base64 JPEG (see ProfilePhotos); blank if none.
+    var photo = ""
+    var role = UserRole.normalUser.rawValue
+
+    init(data: [String: Any]) {
+        uid = data["uid"] as? String ?? ""
+        name = data["name"] as? String ?? ""
+        email = data["email"] as? String ?? ""
+        phone = data["phone"] as? String ?? ""
+        photo = data["photo"] as? String ?? ""
+        role = data["role"] as? String ?? UserRole.normalUser.rawValue
+    }
+}
+
+/// What an expert fills in at sign-up, on top of what every user gives.
+struct ExpertDetails {
+    let specialty: String
+    let experienceYears: Int
+    let city: String
+    let bio: String
+}
+
 /// Stored at experts/{uid} — created only for accounts that signed up
-/// as a Vastu Expert. Powers the live expert directory.
+/// as a Vastu Expert. Powers the live expert directory, so it's readable
+/// by every signed-in user (the phone number stays private in users/{uid}).
+///
+/// Accounts made before sign-up asked for specialty, experience, city,
+/// bio and photo have those blank; the UI shows neutral placeholders.
 struct ExpertProfile: Identifiable, Equatable {
     var uid = ""
     var name = ""
     var email = ""
+    /// Profile photo as a small base64 JPEG (see ProfilePhotos); blank if none.
+    var photo = ""
+    var specialty = ""
+    var experienceYears = 0
+    var city = ""
+    var bio = ""
+    /// The expert's online/offline switch — whether they *want* calls. Being
+    /// reachable also needs their app to be running: see isPresent(at:).
     var isOnline = true
+    /// Last check-in from the expert's app (every minute while it runs).
+    /// Accounts that never checked in have 0, so they show as offline.
+    var lastSeenMillis: Int64 = 0
     var createdAtMillis: Int64 = 0
     /// Total calls this expert has completed — bumped when a call they were on ends.
     var consultationsCompleted: Int64 = 0
+    /// True while the expert is on a call (set from their device), so others see "busy".
+    var inCall = false
+    /// When inCall was last set, so a flag left by a crashed app doesn't keep them busy forever.
+    var inCallSinceMillis: Int64 = 0
 
     var id: String { uid }
 
-    init(uid: String, name: String, email: String, isOnline: Bool = true, createdAtMillis: Int64) {
+    static let maxCallMillis: Int64 = 2 * 60 * 60 * 1000
+    /// How often an expert's app checks in.
+    static let heartbeatNanos: UInt64 = 60 * 1_000_000_000
+    /// Missed about three check-ins → shown as offline.
+    static let presenceTimeoutMillis: Int64 = 3 * 60 * 1000
+
+    init(uid: String, name: String, email: String, photo: String = "", details: ExpertDetails? = nil,
+         isOnline: Bool = true, createdAtMillis: Int64) {
         self.uid = uid
         self.name = name
         self.email = email
+        self.photo = photo
+        specialty = details?.specialty ?? ""
+        experienceYears = details?.experienceYears ?? 0
+        city = details?.city ?? ""
+        bio = details?.bio ?? ""
         self.isOnline = isOnline
         self.createdAtMillis = createdAtMillis
     }
@@ -102,17 +161,59 @@ struct ExpertProfile: Identifiable, Equatable {
         uid = data["uid"] as? String ?? ""
         name = data["name"] as? String ?? ""
         email = data["email"] as? String ?? ""
+        photo = data["photo"] as? String ?? ""
+        specialty = data["specialty"] as? String ?? ""
+        experienceYears = Int(int64(data["experienceYears"]))
+        city = data["city"] as? String ?? ""
+        bio = data["bio"] as? String ?? ""
         // The Android app's Firestore mapper stores Kotlin's `isOnline` as "online".
         isOnline = data["online"] as? Bool ?? data["isOnline"] as? Bool ?? true
+        lastSeenMillis = int64(data["lastSeenMillis"])
         createdAtMillis = int64(data["createdAtMillis"])
         consultationsCompleted = int64(data["consultationsCompleted"])
+        inCall = data["inCall"] as? Bool ?? false
+        inCallSinceMillis = int64(data["inCallSinceMillis"])
     }
 
     var dictionary: [String: Any] {
         [
-            "uid": uid, "name": name, "email": email, "online": isOnline,
-            "createdAtMillis": createdAtMillis, "consultationsCompleted": consultationsCompleted
+            "uid": uid, "name": name, "email": email, "photo": photo,
+            "specialty": specialty, "experienceYears": experienceYears, "city": city, "bio": bio,
+            "online": isOnline, "lastSeenMillis": lastSeenMillis,
+            "createdAtMillis": createdAtMillis, "consultationsCompleted": consultationsCompleted,
+            "inCall": inCall, "inCallSinceMillis": inCallSinceMillis
         ]
+    }
+
+    /// Switched on and their app checked in within presenceTimeoutMillis of `now`.
+    func isPresent(at now: Int64) -> Bool { isOnline && now - lastSeenMillis < Self.presenceTimeoutMillis }
+
+    /// On a call at `now` (ignoring a stale flag more than maxCallMillis old).
+    func isBusy(at now: Int64) -> Bool { inCall && now - inCallSinceMillis < Self.maxCallMillis }
+
+    var displaySpecialty: String { specialty.isEmpty ? "Vastu Expert" : specialty }
+
+    var displayBio: String { bio.isEmpty ? "\(name) hasn't added an introduction yet." : bio }
+
+    /// "New" until they've done a consultation; there are no real ratings yet, so none are shown.
+    var consultationsLabel: String {
+        switch consultationsCompleted {
+        case 0: return "New"
+        case 1: return "1 consultation"
+        default: return "\(consultationsCompleted) consultations"
+        }
+    }
+}
+
+extension Array where Element == ExpertProfile {
+    /// Callable experts first, then busy, then offline; alphabetical within each.
+    func sortedForDirectory(now: Int64) -> [ExpertProfile] {
+        sorted { a, b in
+            let ka = (a.isPresent(at: now) ? 0 : 1, a.isBusy(at: now) ? 1 : 0)
+            let kb = (b.isPresent(at: now) ? 0 : 1, b.isBusy(at: now) ? 1 : 0)
+            if ka != kb { return ka < kb }
+            return a.name.lowercased() < b.name.lowercased()
+        }
     }
 }
 
@@ -158,54 +259,34 @@ struct CallHistoryEntry: Identifiable {
     }
 }
 
-/// Real expert signups only capture name/email — there's no
-/// specialty/bio/photo/pricing step yet. Until there is, every expert
-/// cycles through one of these "profile templates" so the UI has
-/// something to show. Same templates (and the same expert → template
-/// mapping) as the Android app.
+/// Calls with experts are free for now: prices, the wallet and per-call
+/// cost are hidden everywhere. Flip this to show them again once real
+/// billing exists.
+enum CallPricing {
+    static let paidCalls = false
+}
+
+/// Per-session prices for the (hidden) paid calls — there's no pricing
+/// step for experts yet, so each expert gets one of these placeholder
+/// rates. Same templates and expert → template mapping as the Android app.
 struct ExpertDisplayExtras {
-    let specialty: String
-    let experienceYears: Int
-    let location: String
-    let rating: Double
-    let reviewCount: Int
     let pricePerSession: Int
-    let avatarSeed: String
-    let bio: String
 
     private static let templates = [
-        ExpertDisplayExtras(
-            specialty: "Residential Vastu", experienceYears: 15, location: "Mumbai", rating: 4.9, reviewCount: 328,
-            pricePerSession: 1200, avatarSeed: "template-1",
-            bio: "Certified Vastu expert specializing in residential spaces, helping families create balanced, harmonious homes."
-        ),
-        ExpertDisplayExtras(
-            specialty: "Commercial Vastu", experienceYears: 12, location: "Delhi", rating: 4.8, reviewCount: 256,
-            pricePerSession: 1500, avatarSeed: "template-2",
-            bio: "Certified Vastu expert specializing in commercial vastu. With years of experience helping clients create harmonious spaces."
-        ),
-        ExpertDisplayExtras(
-            specialty: "Spiritual Consultation", experienceYears: 20, location: "Bangalore", rating: 4.9, reviewCount: 412,
-            pricePerSession: 2000, avatarSeed: "template-3",
-            bio: "Certified Vastu expert blending traditional spiritual consultation with modern space-planning guidance."
-        ),
-        ExpertDisplayExtras(
-            specialty: "Interior Vastu", experienceYears: 9, location: "Pune", rating: 4.7, reviewCount: 143,
-            pricePerSession: 999, avatarSeed: "template-4",
-            bio: "Certified Vastu expert focused on interior layouts, furniture placement, and room-by-room energy flow."
-        )
+        ExpertDisplayExtras(pricePerSession: 1200),
+        ExpertDisplayExtras(pricePerSession: 1500),
+        ExpertDisplayExtras(pricePerSession: 2000),
+        ExpertDisplayExtras(pricePerSession: 999)
     ]
 
-    /// Deterministic per-expert placeholder profile — uses Java's
-    /// String.hashCode so an expert gets the same template on iOS and Android.
+    /// Deterministic per-expert placeholder — uses Java's String.hashCode
+    /// so an expert gets the same template on iOS and Android.
     static func forExpert(_ uid: String) -> ExpertDisplayExtras {
         var hash: Int32 = 0
         for unit in uid.utf16 { hash = 31 &* hash &+ Int32(unit) }
         let positive = hash < 0 ? 0 &- hash : hash
         return templates[Int(positive) % templates.count]
     }
-
-    func avatarSeed(for uid: String) -> String { "\(avatarSeed)-\(uid)" }
 }
 
 /// Profile of Ananya, VastuTalks' always-available AI Vastu agent
@@ -221,4 +302,6 @@ enum AnanyaAgent {
     static let avatarSeed = "demo-expert-ananya"
     static let rating = 4.9
     static let pricePerSession = 1200
+    /// Shows the call button for her on Home and in the chat. Turn off to offer only the chat.
+    static let callEnabled = true
 }

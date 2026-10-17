@@ -60,11 +60,11 @@ final class AgentCallRecorder {
         return name
     }
 
-    /// Saves a camera photo the caller shared, and notes it in the transcript.
-    func savePhoto(_ image: UIImage, caption: String) {
+    /// Saves a photo (the caller's, or one the agent marked up) and notes it in the transcript.
+    func savePhoto(_ image: UIImage, caption: String, who: String = "You") {
         photoCount += 1
         let name = String(format: "photo_%02d.jpg", photoCount)
-        logLine("You", "[\(caption) — saved as \(name)]")
+        logLine(who, "[\(caption) — saved as \(name)]")
         let file = folder.appendingPathComponent(name)
         io.async {
             guard let data = image.jpegData(compressionQuality: 0.9), (try? data.write(to: file)) != nil else { return }

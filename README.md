@@ -7,8 +7,15 @@ users can call each other. This folder is separate from the Android project.
 - SwiftUI, iOS 16+, iPhone (portrait)
 - Firebase (Auth, Firestore, Functions, Messaging) — Swift Package Manager, pinned to 10.29.0
 - Agora RTC 4.5.1 for real video/audio calls — same engine version as Android
-- Ananya, the AI agent: OpenAI chat + transcription, system text-to-speech, the shared
-  whiteboard, and photo/video sharing with compass direction
+- Expert profiles (photo, specialty, experience, city, About), live online/busy status,
+  posts with likes, comments and replies, notifications, and one-to-one chat
+- Calls with experts start as audio; either side can turn the camera on, chat over the
+  call, and the call ends for both when one hangs up
+- Ananya, the AI agent, in English or Hindi: a text chat (saved on the phone) and an
+  audio/video call. She marks her Vastu suggestions right on shared photos and videos,
+  and a guided room scan (from her chat) photographs each wall with the compass and
+  gives a score, numbered findings, fixes and a zone map. The shared whiteboard is
+  hidden for now (`VastuAgent.boardEnabled`), as on Android
 
 Builds with Xcode 14.2 or newer.
 
@@ -46,8 +53,9 @@ Experts' phones ring through Firebase Cloud Messaging, like on Android:
    Personal Team).
 2. In the Apple Developer portal create an **APNs key**, then upload it in
    Firebase Console → Project settings → Cloud Messaging → Apple app configuration.
-3. iPhones only show pushes that carry a visible alert, so the shared
-   `onCallRequestCreated` Cloud Function needs a small addition. Apply
+3. iPhones only show pushes that carry a visible alert, so the shared Cloud
+   Functions (incoming calls, chat messages, likes and comments) need a small
+   addition. Apply
    `functions-ios-push.patch` from this folder to the Android project and redeploy:
    ```
    cd "../VastuTalks 25"
@@ -79,8 +87,14 @@ Drawings, photos and videos are also added to the photo library.
   `call-<callId>` as the expert ID. iOS stores the expert's real uid, so the
   in-call screen shows the expert's proper profile picture.
 
+## Light status bar on dark screens
+`Config/Info.plist` turns off per-screen status-bar control
+(`UIViewControllerBasedStatusBarAppearance = NO`), and the dark screens switch the
+icons to light while they're showing (`darkScreenStatusBar()`).
+
 ## Changing the project
 The `.xcodeproj` is generated from `project.yml` with
 [XcodeGen](https://github.com/yonaskolb/XcodeGen). After editing `project.yml`,
 run `xcodegen generate` in this folder. Adding new Swift files under
 `VastuTalks/` also needs a regenerate (or add them in Xcode as usual).
+Homebrew can't build XcodeGen on macOS 12, so on that Mac add new files in Xcode.

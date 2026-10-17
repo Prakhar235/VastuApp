@@ -13,6 +13,11 @@ enum CallPermissions {
     }
 }
 
+/// How long a call rings before the caller gives up.
+private let ringTimeoutNanos: UInt64 = 45_000_000_000
+/// How long to wait for the other person to join after the call was answered.
+private let remoteJoinTimeoutNanos: UInt64 = 30_000_000_000
+
 /// The pulsing initials/avatar badge on ringing screens.
 private struct PulsingBadge<Content: View>: View {
     @ViewBuilder let content: () -> Content
@@ -39,7 +44,9 @@ private func endCallButton(label: String, action: @escaping () -> Void) -> some 
 }
 
 /// Caller side of a real (Firestore-signaled) call to a signed-up expert:
-/// write a CallRequest → wait for Accept/Decline → fetch a token → join Agora.
+/// check they aren't on another call (being offline is fine: the push rings
+/// their phone) → write a CallRequest → wait for Accept/Decline (giving up
+/// after 45 s) → fetch a token → join Agora.
 struct LiveCallingView: View {
     let calleeUid: String
     let calleeName: String
@@ -54,6 +61,7 @@ struct LiveCallingView: View {
     @State private var callId: String?
     @State private var channelName: String?
     @State private var statusListener: ListenerRegistration?
+    @State private var answered = false
     @State private var started = false
 
     var body: some View {
@@ -83,9 +91,12 @@ struct LiveCallingView: View {
                 }
             }
         }
+        .darkScreenStatusBar()
         .onAppear(perform: start)
         .onDisappear { statusListener?.remove() }
         .onChange(of: agora.connectionState) { state in
+            // The Agora channel ("expert-<uid>"), which the in-call screen and the
+            // call-history logging use to tell which side is the expert.
             if state == .joined, let channel = channelName { onConnected(channel, calleeName) }
         }
         .onChange(of: agora.errorMessage) { message in
@@ -103,13 +114,31 @@ struct LiveCallingView: View {
                 errorText = "You're not signed in."
                 return
             }
+            // Offline is fine — the push rings their phone — but don't ring someone mid-call.
+            if let expert = try? await UserRepository().getExpert(calleeUid) {
+                let now = millisNow()
+                if expert.isBusy(at: now) {
+                    errorText = "\(calleeName) is on another call. Please try again in a few minutes."
+                    return
+                }
+                if !expert.isPresent(at: now) {
+                    statusText = "Ringing \(calleeName)'s phone…\nThey're offline, so it may take a moment."
+                }
+            }
             do {
                 let request = try await CallSignalingRepository().createCallRequest(
                     callerUid: me.uid, callerName: me.displayName ?? "Someone",
                     calleeUid: calleeUid, calleeName: calleeName, callType: callType
                 )
                 callId = request.callId
+                channelName = request.channelName
                 listen(to: request.callId)
+                // Stop ringing if nobody answers.
+                try? await Task.sleep(nanoseconds: ringTimeoutNanos)
+                if !answered && callId == request.callId {
+                    try? await CallSignalingRepository().updateStatus(callId: request.callId, status: .cancelled)
+                    errorText = "\(calleeName) didn't answer. Please try again later."
+                }
             } catch {
                 errorText = error.localizedDescription
             }
@@ -118,15 +147,13 @@ struct LiveCallingView: View {
 
     /// Watches the call request for the callee's response.
     private func listen(to id: String) {
-        var joining = false
         statusListener = CallSignalingRepository().listenForCallStatus(callId: id) { call in
             guard let call = call else { return }
             switch CallRequestStatus(rawValue: call.status) {
             case .accepted:
-                guard !joining else { return }
-                joining = true
+                guard !answered else { return } // the listener can fire again for the same accept
+                answered = true
                 statusText = "Connecting…"
-                channelName = call.channelName
                 Task {
                     do {
                         let token = try await TokenRepository().fetchOrCreateExpertToken(expertUid: calleeUid, channelName: call.channelName)
@@ -136,6 +163,7 @@ struct LiveCallingView: View {
                     }
                 }
             case .declined:
+                answered = true
                 errorText = "\(calleeName) declined the call."
             default:
                 break
@@ -144,9 +172,10 @@ struct LiveCallingView: View {
     }
 }
 
-/// In-call UI for the real signaling flow. Cost and wallet balance are
-/// simulated from the expert's placeholder rate — there's no billing
-/// backend yet, same as Android.
+/// In-call UI for the real signaling flow. Either side can switch between
+/// audio and video at any point (`callType` is only how it started); the
+/// call ends for both when one hangs up. Prices and the wallet stay hidden
+/// while calls are free (CallPricing).
 struct LiveInCallView: View {
     let channelName: String
     let peerName: String
@@ -158,22 +187,31 @@ struct LiveInCallView: View {
     @State private var startTimeMillis = millisNow()
     @State private var isMuted = false
     @State private var isSpeakerOn = true
-    @State private var isCameraOff = false
     @State private var showDrawingCanvas = false
+    @State private var showChat = false
+    @State private var expert: ExpertProfile?
+    /// Who to chat with: the user knows the expert's uid from the channel; the expert looks up who called.
+    @State private var peerUid: String?
+    @State private var callEnded = false
+    @State private var toast: String?
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var expertUid: String {
         channelName.hasPrefix("expert-") ? String(channelName.dropFirst("expert-".count)) : channelName
     }
 
+    /// The channel encodes the expert's own uid, so this tells which side of the call this device is on.
+    private var isExpertOnThisDevice: Bool { Auth.auth().currentUser?.uid == expertUid }
+
     var body: some View {
-        let extras = ExpertDisplayExtras.forExpert(expertUid)
-        // Only the expert gets the draw tool: the channel encodes the expert's own uid.
-        let isExpertOnThisDevice = Auth.auth().currentUser?.uid == expertUid
-        let cost = Double(elapsedSeconds) / 60 * (Double(extras.pricePerSession) / 60)
-        let remaining = max(0, 2450 - cost)
+        // The user sees the expert's real photo and specialty; the expert sees
+        // the caller's initials (users' profiles are private to them).
+        let peerPhoto = isExpertOnThisDevice ? "" : expert?.photo ?? ""
+        let peerSubtitle = isExpertOnThisDevice ? "Client" : expert?.displaySpecialty ?? "Vastu Expert"
+        let ratePerMinute = Double(ExpertDisplayExtras.forExpert(expertUid).pricePerSession) / 60
+        let cost = Double(elapsedSeconds) / 60 * ratePerMinute
         let timerLabel = String(format: "%d:%02d", elapsedSeconds / 60, elapsedSeconds % 60)
-        let showRemoteVideo = callType == .video && agora.remoteUid != nil && !isCameraOff
+        let showRemoteVideo = agora.remoteUid != nil && agora.remoteVideoOn
 
         ZStack {
             LinearGradient(colors: [.vastuPrimary, .vastuPrimaryDark], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
@@ -184,83 +222,81 @@ struct LiveInCallView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     pill(timerLabel)
-                    pill(String(format: "Cost: ₹%.2f", cost))
+                    pill(agora.localVideoOn || agora.remoteVideoOn ? "Video call" : "Audio call")
                     Spacer()
-                    pill(String(format: "₹%.2f", remaining))
+                    if CallPricing.paidCalls {
+                        pill(String(format: "Cost: ₹%.2f", cost))
+                        pill(String(format: "₹%.2f", max(0, 2450 - cost)))
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
 
+                Spacer()
                 if !showRemoteVideo {
-                    Spacer()
                     VStack(spacing: 16) {
                         Circle().fill(Color.white.opacity(0.15)).frame(width: 140, height: 140)
-                            .overlay(AvatarImage(seed: extras.avatarSeed(for: expertUid), placeholder: .white)
-                                .frame(width: 124, height: 124).clipShape(Circle()))
-                        if callType == .video && agora.remoteUid == nil {
+                            .overlay(ProfileAvatar(photo: peerPhoto, name: peerName, size: 124))
+                        if agora.localVideoOn && agora.remoteUid == nil {
                             Text("Connecting you with \(peerName.split(separator: " ").first.map(String.init) ?? peerName)…")
                                 .font(.vt(13)).foregroundColor(.white.opacity(0.7)).multilineTextAlignment(.center)
                                 .padding(.horizontal, 32)
                         }
                         VStack(spacing: 2) {
                             Text(peerName).font(.vt(16)).foregroundColor(.white)
-                            Text(extras.specialty).font(.vt(12)).foregroundColor(.white.opacity(0.8))
+                            Text(peerSubtitle).font(.vt(12)).foregroundColor(.white.opacity(0.8))
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.black.opacity(0.25)))
                     }
                     Spacer()
-                } else {
-                    Spacer()
                 }
 
-                // Local camera preview thumbnail (video calls only).
-                if callType == .video {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16).fill(Color.black.opacity(0.35))
-                        if isCameraOff {
-                            Image(systemName: "person.fill").font(.system(size: 34)).foregroundColor(.white.opacity(0.6))
-                        } else {
-                            LocalVideoView().clipShape(RoundedRectangle(cornerRadius: 16))
-                        }
-                    }
-                    .frame(width: 90, height: 120)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.trailing, 20)
-                    .padding(.top, 4)
-                    .padding(.bottom, 12)
+                // Your own camera, on top of the other person's video, while this side sends video
+                // (hidden under the chat).
+                if agora.localVideoOn && !showChat {
+                    LocalVideoView()
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .frame(width: 90, height: 120)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 20)
+                        .padding(.top, 4)
+                        .padding(.bottom, 12)
                 }
 
                 HStack {
                     Spacer()
-                    controlButton(isMuted ? "mic.slash.fill" : "mic.fill", active: isMuted) {
+                    controlButton(isMuted ? "mic.slash.fill" : "mic.fill", active: isMuted, label: isMuted ? "Unmute" : "Mute") {
                         isMuted.toggle()
                         AgoraCallManager.shared.muteLocalAudio(isMuted)
                     }
                     Spacer()
-                    endCallButton(label: "End call") { onEndCall(elapsedSeconds, startTimeMillis) }
+                    endCallButton(label: "End call") { endCall() }
                     Spacer()
-                    if callType == .video {
-                        controlButton("arrow.triangle.2.circlepath.camera.fill", active: false) { AgoraCallManager.shared.switchCamera() }
-                    } else {
-                        controlButton("speaker.wave.2.fill", active: isSpeakerOn) { isSpeakerOn.toggle() }
-                    }
+                    controlButton(agora.localVideoOn ? "video.fill" : "video.slash.fill", active: agora.localVideoOn,
+                                  label: agora.localVideoOn ? "Switch to audio only" : "Switch to video") { toggleVideo() }
                     Spacer()
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 20)
 
-                if callType == .video {
-                    controlButton("video.slash.fill", active: isCameraOff) {
-                        isCameraOff.toggle()
-                        AgoraCallManager.shared.muteLocalVideo(isCameraOff)
+                HStack(spacing: 24) {
+                    controlButton("speaker.wave.2.fill", active: isSpeakerOn, label: isSpeakerOn ? "Speaker off" : "Speaker on") {
+                        isSpeakerOn.toggle()
                     }
-                    .padding(.bottom, 24)
+                    if agora.localVideoOn {
+                        controlButton("arrow.triangle.2.circlepath.camera.fill", active: false, label: "Switch camera") {
+                            AgoraCallManager.shared.switchCamera()
+                        }
+                    }
                 }
+                .padding(.bottom, 16)
 
                 HStack(spacing: 16) {
-                    smallButton("bubble.left.and.bubble.right.fill", label: "Chat") { /* No in-call chat yet — same as Android. */ }
+                    smallButton("bubble.left.and.bubble.right.fill", label: "Chat") {
+                        if peerUid != nil { showChat = true } else { toast = "Chat is still loading — try again in a moment." }
+                    }
                     if isExpertOnThisDevice {
                         smallButton("pencil.tip", label: "Sketch") { showDrawingCanvas = true }
                     }
@@ -268,19 +304,79 @@ struct LiveInCallView: View {
                 .padding(.bottom, 20)
             }
 
+            // The chat with the other person, over the call (which keeps going underneath).
+            // An overlay, not a full-screen cover, so this screen doesn't get onDisappear and hang up.
+            if showChat, let uid = peerUid {
+                ConversationView(otherUid: uid, otherName: peerName, onBack: { showChat = false },
+                                 onCall: { _, _ in }, showCallButton: false)
+                    .transition(.move(edge: .bottom))
+            }
+
             if showDrawingCanvas {
-                DrawingCanvasOverlay(
-                    timerLabel: timerLabel,
-                    peerName: peerName,
-                    peerSpecialty: extras.specialty,
-                    avatarSeed: extras.avatarSeed(for: expertUid)
-                ) { _ in showDrawingCanvas = false }
+                DrawingCanvasOverlay(timerLabel: timerLabel, peerName: peerName, peerSpecialty: peerSubtitle,
+                                     peerPhoto: peerPhoto) { _ in showDrawingCanvas = false }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: showChat)
+        .toast($toast)
+        .darkScreenStatusBar()
         .onReceive(ticker) { _ in elapsedSeconds += 1 }
-        .onAppear { AgoraCallManager.shared.setSpeakerphoneEnabled(isSpeakerOn) }
+        .onAppear(perform: start)
         .onChange(of: isSpeakerOn) { AgoraCallManager.shared.setSpeakerphoneEnabled($0) }
-        .onDisappear { AgoraCallManager.shared.leaveAndRelease() }
+        // When the other person hangs up (or drops out), end the call here too.
+        .onChange(of: agora.remoteLeft) { left in
+            guard left else { return }
+            toast = "\(peerName) ended the call"
+            endCall()
+        }
+        // Same if they never join.
+        .task(id: agora.remoteUid == nil) {
+            guard agora.remoteUid == nil else { return }
+            try? await Task.sleep(nanoseconds: remoteJoinTimeoutNanos)
+            guard !Task.isCancelled, agora.remoteUid == nil, !agora.remoteLeft else { return }
+            toast = "\(peerName) couldn't join the call"
+            endCall()
+        }
+        .onDisappear {
+            AgoraCallManager.shared.leaveAndRelease()
+            if isExpertOnThisDevice { Task.detached { try? await UserRepository().setInCall(false) } }
+        }
+    }
+
+    private func start() {
+        AgoraCallManager.shared.setSpeakerphoneEnabled(isSpeakerOn)
+        if isExpertOnThisDevice {
+            // The expert shows as "on a call" to everyone else until this screen closes.
+            Task.detached { try? await UserRepository().setInCall(true) }
+            let expertUid = self.expertUid
+            Task { peerUid = await CallSignalingRepository().latestAcceptedCallerUid(expertUid: expertUid) }
+        } else {
+            peerUid = expertUid
+            let expertUid = self.expertUid
+            Task { expert = try? await UserRepository().getExpert(expertUid) }
+        }
+    }
+
+    private func endCall() {
+        guard !callEnded else { return }
+        callEnded = true
+        onEndCall(elapsedSeconds, startTimeMillis)
+    }
+
+    private func toggleVideo() {
+        if agora.localVideoOn {
+            AgoraCallManager.shared.setLocalVideo(false)
+            return
+        }
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            DispatchQueue.main.async {
+                if granted {
+                    AgoraCallManager.shared.setLocalVideo(true)
+                } else {
+                    toast = "Camera permission is needed to switch to video."
+                }
+            }
+        }
     }
 
     private func pill(_ text: String) -> some View {
@@ -289,11 +385,12 @@ struct LiveInCallView: View {
             .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.18)))
     }
 
-    private func controlButton(_ icon: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private func controlButton(_ icon: String, active: Bool, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Circle().fill(active ? Color.white : Color.white.opacity(0.15)).frame(width: 56, height: 56)
                 .overlay(Image(systemName: icon).font(.system(size: 20)).foregroundColor(active ? .vastuPrimaryDark : .white))
         }
+        .accessibilityLabel(label)
     }
 
     private func smallButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
@@ -312,7 +409,7 @@ struct DrawingCanvasOverlay: View {
     let timerLabel: String
     let peerName: String
     let peerSpecialty: String
-    let avatarSeed: String
+    let peerPhoto: String
     let onClose: (UIImage?) -> Void
 
     private struct Stroke { var points: [CGPoint]; let color: Color }
@@ -347,7 +444,7 @@ struct DrawingCanvasOverlay: View {
             VStack {
                 HStack(spacing: 12) {
                     HStack(spacing: 8) {
-                        AvatarImage(seed: avatarSeed, placeholder: .white).frame(width: 28, height: 28).clipShape(Circle())
+                        ProfileAvatar(photo: peerPhoto, name: peerName, size: 28)
                         Text(peerName).font(.vt(13)).foregroundColor(.white).lineLimit(1)
                         Text("·  \(peerSpecialty)").font(.vt(11)).foregroundColor(.white.opacity(0.7)).lineLimit(1)
                     }
@@ -417,7 +514,9 @@ struct DrawingCanvasOverlay: View {
 }
 
 /// Full-screen incoming-call UI, opened by tapping the push notification —
-/// the iOS counterpart of Android's IncomingCallActivity.
+/// the iOS counterpart of Android's IncomingCallActivity. Closes by itself
+/// if the call stops ringing some other way (the caller hung up, it was
+/// answered or declined in the app, or it timed out).
 struct IncomingCallView: View {
     let call: IncomingCallPush
 
@@ -425,6 +524,7 @@ struct IncomingCallView: View {
     @ObservedObject private var agora = AgoraCallManager.shared
     @State private var isConnecting = false
     @State private var errorText: String?
+    @State private var statusListener: ListenerRegistration?
 
     private var isVideo: Bool { call.callType == "VIDEO" }
 
@@ -468,6 +568,15 @@ struct IncomingCallView: View {
                 .padding(.bottom, 56)
             }
         }
+        .darkScreenStatusBar()
+        .onAppear {
+            IncomingCallAlerts.clearNotification(callId: call.callId)
+            statusListener = CallSignalingRepository().listenForCallStatus(callId: call.callId) { request in
+                guard !isConnecting, let request = request, request.status != CallRequestStatus.ringing.rawValue else { return }
+                dismiss()
+            }
+        }
+        .onDisappear { statusListener?.remove() }
         .onChange(of: agora.connectionState) { state in
             guard state == .joined else { return }
             // Joined — land straight on the in-call screen, no detour through Home.
@@ -478,6 +587,7 @@ struct IncomingCallView: View {
     }
 
     private func accept() {
+        // Accepted here, so the status changing to ACCEPTED shouldn't close this screen.
         isConnecting = true
         errorText = nil
         Task {

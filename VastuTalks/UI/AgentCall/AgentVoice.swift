@@ -16,15 +16,19 @@ final class AgentVoice: NSObject, AVSpeechSynthesizerDelegate {
     private let synthesizer = AVSpeechSynthesizer()
     private var pending: [ObjectIdentifier: DispatchWorkItem] = [:]
     private let voice = AVSpeechSynthesisVoice(language: "en-IN") ?? AVSpeechSynthesisVoice(language: "en-US")
+    private let hindiVoice = AVSpeechSynthesisVoice(language: "hi-IN")
 
     override init() {
         super.init()
         synthesizer.delegate = self
     }
 
-    func speak(_ text: String) {
+    func speak(_ reply: String) {
+        let text = reply.replacingOccurrences(of: "**", with: "") // highlighting is for the chat; don't read it out
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = voice
+        // Hindi replies are in Devanagari, which the English voice can't read.
+        let isHindi = text.unicodeScalars.contains { (0x0900...0x097F).contains($0.value) }
+        utterance.voice = isHindi ? (hindiVoice ?? voice) : voice
         let id = ObjectIdentifier(utterance)
         let timeout = DispatchWorkItem { [weak self] in self?.finished(id) }
         pending[id] = timeout

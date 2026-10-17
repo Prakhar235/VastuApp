@@ -3,17 +3,20 @@ import AVFoundation
 private let sampleRate = 16_000.0
 private let frameSamples = 480 // 30 ms
 private let startFrames = 3 // ~90 ms of loud audio = caller started talking
-private let endSilenceFrames = 37 // ~1.1 s of quiet = caller finished
+private let endSilenceFrames = 25 // ~750 ms of quiet = caller finished
 private let preRollFrames = 10 // keep ~300 ms before speech so the first word isn't clipped
 private let minSpeechFrames = 12 // ignore blips shorter than ~360 ms
-private let maxSpeechFrames = 1000 // cap one utterance at ~30 s
+private let maxSpeechFrames = 500 // cap one utterance at ~15 s
+private let calibrationFrames = 10 // ~300 ms to measure the room before listening for speech
 
 /// The AI agent's ears. After start() it keeps the mic open and waits —
 /// for as long as it takes — for the caller to start talking, then
 /// records until they pause and hands the utterance over as a 16 kHz
 /// mono WAV (for VastuAgent.transcribe), and stops.
 ///
-/// Same adaptive-noise-floor voice detector as the Android app.
+/// Same adaptive-noise-floor voice detector as the Android app. The room's
+/// noise is measured when the mic first opens and carried from turn to turn,
+/// so fan or AC noise doesn't look like non-stop talking.
 final class CallerListener {
     /// Mic is open and waiting for speech.
     private(set) var isListening = false
@@ -32,7 +35,9 @@ final class CallerListener {
     private var pendingSamples: [Int16] = []
     private var preRoll: [[Int16]] = []
     private var speech: [[Int16]] = []
-    private var noiseFloor = 150.0
+    /// Background noise level, carried from one turn to the next; nil until first measured.
+    private var noiseFloor: Double?
+    private var calibration: [Double] = []
     private var loudRun = 0
     private var quietRun = 0
     private var inSpeech = false
@@ -98,7 +103,7 @@ final class CallerListener {
         pendingSamples.removeAll()
         preRoll.removeAll()
         speech.removeAll()
-        noiseFloor = 150
+        calibration.removeAll()
         loudRun = 0
         quietRun = 0
         inSpeech = false
@@ -117,6 +122,18 @@ final class CallerListener {
     /// Returns true once an utterance has been handed over.
     private func handleFrame(_ chunk: [Int16], _ gen: Int) -> Bool {
         let level = rms(chunk)
+        // On the first turn, measure the room before listening: a quiet starting
+        // guess makes fan/AC noise look like non-stop talking, so the caller's
+        // pause is never detected. A low percentile ignores the caller if they
+        // start talking straight away.
+        guard let floor = noiseFloor else {
+            calibration.append(level)
+            if calibration.count >= calibrationFrames {
+                noiseFloor = min(3000, max(50, calibration.sorted()[2]))
+            }
+            return false
+        }
+        let noiseFloor = floor
         if !inSpeech {
             preRoll.append(chunk)
             if preRoll.count > preRollFrames { preRoll.removeFirst() }
@@ -129,7 +146,7 @@ final class CallerListener {
                 setHearing(true, gen)
             } else {
                 // Track background noise only while nobody is talking.
-                noiseFloor = min(3000, max(50, noiseFloor * 0.97 + level * 0.03))
+                self.noiseFloor = min(3000, max(50, noiseFloor * 0.97 + level * 0.03))
             }
         } else {
             speech.append(chunk)
