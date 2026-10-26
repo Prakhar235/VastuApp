@@ -24,7 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +50,17 @@ fun ChatsListScreen(onBack: () -> Unit, onOpenChat: (otherUid: String, otherName
     val repository = remember { ChatRepository() }
     val chats by remember { repository.listenMyChats() }.collectAsState(initial = null)
     val myUid = repository.myUid.orEmpty()
+    // Chats saved without the other person's name: look experts up in the directory.
+    val users = remember { com.vastutalks.app.data.repository.UserRepository() }
+    var lookedUpNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(chats) {
+        val missing = chats.orEmpty().map { it.otherUid(myUid) }
+            .filter { uid -> chats.orEmpty().any { it.otherUid(myUid) == uid && it.names[uid].isNullOrBlank() } && uid !in lookedUpNames }
+        missing.forEach { uid ->
+            val name = users.getExpert(uid).getOrNull()?.name.orEmpty().ifBlank { "VastuTalks user" }
+            lookedUpNames = lookedUpNames + (uid to name)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(SurfaceLight).statusBarsPadding().navigationBarsPadding()) {
         Row(
@@ -73,7 +87,7 @@ fun ChatsListScreen(onBack: () -> Unit, onOpenChat: (otherUid: String, otherName
             else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
                 items(list, key = { it.id }) { chat ->
                     val other = chat.otherUid(myUid)
-                    val name = chat.names[other].orEmpty().ifBlank { "Unknown" }
+                    val name = chat.names[other].orEmpty().ifBlank { lookedUpNames[other] ?: "…" }
                     ChatRow(chat, myUid, other, name, onClick = { onOpenChat(other, name) })
                 }
             }

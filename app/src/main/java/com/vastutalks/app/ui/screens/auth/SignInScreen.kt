@@ -50,7 +50,6 @@ private enum class SignInMode { PASSWORD, OTP }
 fun SignInScreen(
     onSignInSuccess: () -> Unit,
     onNavigateToCreateAccount: () -> Unit,
-    onForgotPassword: () -> Unit,
     authViewModel: AuthViewModel = viewModel()
 ) {
     var mode by remember { mutableStateOf(SignInMode.PASSWORD) }
@@ -59,6 +58,7 @@ fun SignInScreen(
     var passwordVisible by remember { mutableStateOf(false) }
 
     val uiState by authViewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var errorText by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(uiState.errorMessage) {
@@ -177,7 +177,11 @@ fun SignInScreen(
                             textAlign = TextAlign.End,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onForgotPassword() }
+                                .clickable {
+                                    authViewModel.sendPasswordReset(email) {
+                                        android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
                         )
                     } else {
                         Spacer(height = 16.dp)

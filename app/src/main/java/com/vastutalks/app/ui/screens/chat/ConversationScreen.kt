@@ -80,6 +80,7 @@ import com.vastutalks.app.ui.theme.VastuPrimary
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -93,7 +94,9 @@ class ConversationViewModel(savedState: SavedStateHandle) : ViewModel() {
     private val chats = ChatRepository()
     private val users = UserRepository()
     val otherUid: String = checkNotNull(savedState["otherUid"])
-    val otherName: String = URLDecoder.decode(savedState.get<String>("otherName").orEmpty(), "UTF-8")
+    /** As passed in; filled from their expert entry or the chat when that was blank. */
+    var otherName by mutableStateOf(URLDecoder.decode(savedState.get<String>("otherName").orEmpty(), "UTF-8"))
+        private set
     val myUid: String = chats.myUid.orEmpty()
     val chatId: String = ChatRepository.chatIdFor(myUid, otherUid)
 
@@ -123,7 +126,15 @@ class ConversationViewModel(savedState: SavedStateHandle) : ViewModel() {
         private set
 
     init {
-        viewModelScope.launch { otherExpert = users.getExpert(otherUid).getOrNull() }
+        viewModelScope.launch {
+            otherExpert = users.getExpert(otherUid).getOrNull()
+            if (otherName.isBlank()) otherName = otherExpert?.name.orEmpty()
+            if (otherName.isBlank()) {
+                otherName = runCatching { chats.listenMyChats().first() }.getOrNull()
+                    ?.firstOrNull { it.id == chatId }?.names?.get(otherUid).orEmpty()
+                    .ifBlank { "VastuTalks user" }
+            }
+        }
     }
 
     fun markRead() {

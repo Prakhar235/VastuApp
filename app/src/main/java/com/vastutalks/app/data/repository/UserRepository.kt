@@ -83,6 +83,15 @@ class UserRepository(
         }
     }
 
+    /**
+     * Unlinks this device from the signed-in account before signing out, so
+     * pushes for that account (calls, chats, likes) stop arriving here.
+     */
+    suspend fun clearFcmToken() {
+        val uid = auth.currentUser?.uid ?: return
+        runCatching { firestore.collection("users").document(uid).update("fcmToken", FieldValue.delete()).await() }
+    }
+
     /** The signed-in user's own profile (name, phone, photo…), live. */
     fun listenMyProfile(): Flow<UserProfile?> = callbackFlow {
         val uid = auth.currentUser?.uid
@@ -106,6 +115,23 @@ class UserRepository(
             firestore.collection("users").document(uid).update("photo", photo).await()
             val expertDoc = firestore.collection("experts").document(uid)
             if (expertDoc.get().await().exists()) expertDoc.update("photo", photo).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Changes the signed-in user's name and phone — on their account,
+     * users/{uid}, and experts/{uid} for experts (so the directory shows it).
+     */
+    suspend fun updateNameAndPhone(name: String, phone: String): Result<Unit> {
+        val user = auth.currentUser ?: return Result.failure(IllegalStateException("No signed-in user"))
+        return try {
+            user.updateProfile(com.google.firebase.auth.UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()
+            firestore.collection("users").document(user.uid).update(mapOf("name" to name, "phone" to phone)).await()
+            val expertDoc = firestore.collection("experts").document(user.uid)
+            if (expertDoc.get().await().exists()) expertDoc.update("name", name).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

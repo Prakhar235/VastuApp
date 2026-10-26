@@ -52,6 +52,16 @@ class AuthRepository(
         }
     }
 
+    /** Emails a password-reset link to [email]. */
+    suspend fun sendPasswordReset(email: String): Result<Unit> {
+        return try {
+            firebaseAuth.sendPasswordResetEmail(email.trim()).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(mapAuthError(e))
+        }
+    }
+
     fun signOut() {
         firebaseAuth.signOut()
     }

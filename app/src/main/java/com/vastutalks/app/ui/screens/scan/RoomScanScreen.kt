@@ -422,7 +422,7 @@ private fun AnalyzingStage(viewModel: RoomScanViewModel) {
         } else {
             CircularProgressIndicator(color = VastuPrimary, modifier = Modifier.padding(top = 28.dp))
             Text(
-                tr("${AnanyaAgent.NAME.substringBefore(' ')} is reading your room…", "${AnanyaAgent.NAME.substringBefore(' ')} आपके कमरे को देख रही हैं…"),
+                tr("${AnanyaAgent.NAME} is reading your room…", "${AnanyaAgent.NAME} आपके कमरे को देख रही हैं…"),
                 color = CallTones.TextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,

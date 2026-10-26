@@ -19,6 +19,7 @@ class VastuApplication : Application() {
         com.vastutalks.app.data.ai.AgentLanguagePref.init(this)
         createIncomingCallChannel()
         createPostActivityChannel()
+        com.vastutalks.app.notifications.PushTokens.start(this)
     }
 
     private fun createPostActivityChannel() {

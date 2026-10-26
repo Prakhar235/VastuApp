@@ -123,10 +123,16 @@ class RoomScanViewModel : ViewModel() {
         stage = Stage.CAPTURE
     }
 
+    /** Where a finished scan goes instead of the chat, e.g. into a call with Ananya. */
+    var onHandOff: ((RoomScanHandoff.Scan) -> Unit)? = null
+
     /** Sends the scan to the chat with Ananya (once); false if there's nothing to send. */
     fun handOffToChat(): Boolean {
         val result = analysis ?: return false
-        if (!sentToChat) RoomScanHandoff.send(RoomScanHandoff.Scan(walls, result))
+        if (!sentToChat) {
+            val scan = RoomScanHandoff.Scan(walls, result)
+            onHandOff?.invoke(scan) ?: RoomScanHandoff.send(scan)
+        }
         sentToChat = true
         return true
     }

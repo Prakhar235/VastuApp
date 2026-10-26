@@ -183,7 +183,7 @@ internal fun RoomResultScreen(viewModel: RoomScanViewModel, onBack: () -> Unit, 
         )
 
         PillButton(
-            tr("Ask ${AnanyaAgent.NAME.substringBefore(' ')} about this room", "${AnanyaAgent.NAME.substringBefore(' ')} से इस कमरे के बारे में पूछें"),
+            tr("Ask ${AnanyaAgent.NAME} about this room", "${AnanyaAgent.NAME} से इस कमरे के बारे में पूछें"),
             modifier = Modifier.fillMaxWidth(),
             outlined = true,
             onClick = onAskAgent

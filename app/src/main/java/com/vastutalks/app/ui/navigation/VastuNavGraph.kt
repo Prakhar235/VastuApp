@@ -28,6 +28,7 @@ import com.vastutalks.app.ui.screens.home.HomeScreen
 import com.vastutalks.app.ui.screens.profile.ProfileScreen
 import com.vastutalks.app.ui.screens.splash.SplashScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.net.URLDecoder
 
 /** Set by MainActivity when launched right after IncomingCallActivity accepted+joined a call. */
@@ -53,6 +54,22 @@ fun VastuNavGraph(
     val callHistoryRepository = remember { CallHistoryRepository() }
     val userRepository = remember { UserRepository() }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    fun signOut() {
+        navScope.launch {
+            // Experts show as offline straight away (no-op for normal users).
+            userRepository.heartbeat(present = false)
+            // Stop this account's pushes reaching the phone once it's signed out.
+            userRepository.clearFcmToken()
+            runCatching { com.google.firebase.messaging.FirebaseMessaging.getInstance().deleteToken().await() }
+            com.vastutalks.app.notifications.PushTokens.forget(context)
+            androidx.core.app.NotificationManagerCompat.from(context).cancelAll()
+            FirebaseAuth.getInstance().signOut()
+            navController.navigate(Routes.SIGN_IN) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(navController = navController, startDestination = Routes.SPLASH) {
@@ -111,8 +128,7 @@ fun VastuNavGraph(
                         popUpTo(Routes.SIGN_IN) { inclusive = true }
                     }
                 },
-                onNavigateToCreateAccount = { navController.navigate(Routes.CREATE_ACCOUNT) },
-                onForgotPassword = { /* TODO: wire forgot-password flow */ }
+                onNavigateToCreateAccount = { navController.navigate(Routes.CREATE_ACCOUNT) }
             )
         }
 
@@ -135,7 +151,6 @@ fun VastuNavGraph(
 
         composable(Routes.HOME) {
             HomeScreen(
-                onSearchClick = { /* TODO: dedicated search screen */ },
                 onNotificationsClick = { navController.navigate(Routes.NOTIFICATIONS) },
                 onProfileClick = { navController.navigate(Routes.PROFILE) },
                 onCallExpert = { expertId, expertName, callType ->
@@ -235,16 +250,8 @@ fun VastuNavGraph(
         composable(Routes.PROFILE) {
             ProfileScreen(
                 onBack = { navController.popBackStack() },
-                onSignOut = {
-                    navScope.launch {
-                        // Experts show as offline straight away (no-op for normal users).
-                        userRepository.heartbeat(present = false)
-                        FirebaseAuth.getInstance().signOut()
-                        navController.navigate(Routes.SIGN_IN) {
-                            popUpTo(Routes.HOME) { inclusive = true }
-                        }
-                    }
-                }
+                onSignOut = ::signOut,
+                onOpenNotifications = { navController.navigate(Routes.NOTIFICATIONS) }
             )
         }
 

@@ -99,7 +99,15 @@ import com.vastutalks.app.ui.components.CapturedPhoto
 import com.vastutalks.app.ui.components.CapturedVideo
 import com.vastutalks.app.ui.components.VideoReviewSheet
 import com.vastutalks.app.ui.components.rememberVideoCapture
-import com.vastutalks.app.ui.components.LanguageSwitch
+import com.vastutalks.app.ui.components.AgentHeader
+import com.vastutalks.app.ui.components.agentScreenBackground
+import com.vastutalks.app.data.ai.RoomScanHandoff
+import com.vastutalks.app.data.ai.AgentChatStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.vastutalks.app.ui.screens.scan.RoomScanScreen
+import com.vastutalks.app.ui.screens.scan.RoomScanViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vastutalks.app.ui.components.CameraViewfinder
 import com.vastutalks.app.ui.components.DarkScreenStatusBar
 import com.vastutalks.app.ui.components.ViewfinderState
@@ -173,7 +181,17 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     var hasGreeted by remember { mutableStateOf(false) }
     var photoToReview by remember { mutableStateOf<CapturedPhoto?>(null) }
     var videoToReview by remember { mutableStateOf<CapturedVideo?>(null) }
+    /** Counts room scans started in this call; non-zero while one is on screen. */
+    var scanNumber by remember { mutableIntStateOf(0) }
+    var isScanning by remember { mutableStateOf(false) }
     val chatMessages = remember { mutableStateListOf<AgentChatMessage>() }
+    // The call continues the saved chat with her and saves back into it,
+    // so the chat shows what was said here (and she remembers it there).
+    val chatStore = remember { AgentChatStore(context) }
+    var nextMessageId by remember { mutableIntStateOf(0) }
+    /** False until the saved chat is read, so it's never overwritten before then. */
+    var chatLoaded by remember { mutableStateOf(false) }
+    var savedMarkable by remember { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
     val isAgentTyping = pendingTurns > 0
     val isResumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
 
@@ -213,16 +231,45 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         return bitmap
     }
 
+    /** Writes the call so far into the saved chat. */
+    fun saveToChat() {
+        if (!chatLoaded) return
+        val history = runCatching { agent.exportHistory() }.getOrNull() ?: return
+        val images = agent.markableImages
+        if (images !== savedMarkable) {
+            chatStore.saveMarkable(images)
+            savedMarkable = images
+        }
+        chatStore.save(chatMessages, history, images.size, fromCall = true)
+    }
+
     fun addMessage(message: AgentChatMessage) {
         chatMessages.add(message)
         if (page != CallPage.CHAT && message.sender == ChatSender.AGENT) unread++
+        // Her replies come once her history has the turn, so save then (the caller's line goes with it).
+        if (message.sender == ChatSender.AGENT) saveToChat()
+    }
+
+    /** Puts the saved chat ahead of the call and gives her its memory. */
+    suspend fun loadChat() {
+        val saved = withContext(Dispatchers.IO) { chatStore.load() }
+        if (saved != null) {
+            agentTurnLock.withLock { agent.restore(saved.history, saved.markable) }
+            savedMarkable = agent.markableImages
+            val early = chatMessages.toList() // anything typed while it loaded
+            chatMessages.clear()
+            chatMessages.addAll(saved.messages)
+            nextMessageId = (saved.messages.maxOfOrNull { it.id } ?: -1) + 1
+            early.forEach { chatMessages.add(it.copy(id = nextMessageId++)) }
+        }
+        chatLoaded = true
     }
 
     fun postAgentTurn(turn: AgentTurn) {
         voice.speak(turn.say)
         addMessage(
             AgentChatMessage(
-                id = chatMessages.size,
+                id = nextMessageId++,
                 text = turn.chatText,
                 sender = ChatSender.AGENT,
                 image = turn.markedPhoto?.asImageBitmap()
@@ -253,7 +300,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     }
 
     fun onUserSaid(text: String) {
-        addMessage(AgentChatMessage(id = chatMessages.size, text = text, sender = ChatSender.USER))
+        addMessage(AgentChatMessage(id = nextMessageId++, text = text, sender = ChatSender.USER))
         recorder.logLine("You", text)
         val view = if (isVideo) viewfinder.snapshot() else null
         if (view != null) {
@@ -268,7 +315,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         val bitmap = saveBoard("You", "Sent the board to ${AnanyaAgent.NAME}") ?: board.render()
         addMessage(
             AgentChatMessage(
-                id = chatMessages.size,
+                id = nextMessageId++,
                 text = "",
                 sender = ChatSender.USER,
                 image = android.graphics.Bitmap.createScaledBitmap(bitmap, 360, 360, true).asImageBitmap()
@@ -297,7 +344,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         val thumbScale = 480f / maxOf(preview.width, preview.height)
         addMessage(
             AgentChatMessage(
-                id = chatMessages.size,
+                id = nextMessageId++,
                 text = caption,
                 sender = ChatSender.USER,
                 image = android.graphics.Bitmap.createScaledBitmap(
@@ -327,6 +374,30 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         askAgent { agent.reviewVideo(video.frames, video.durationMs, question, facing) }
     }
 
+    /** Puts a finished room scan into the call's chat and into her memory of it. */
+    fun addRoomScan(scan: RoomScanHandoff.Scan) {
+        scope.launch {
+            agentTurnLock.withLock {
+                agent.attachRoomScan(scan.walls, scan.analysis)
+                postMedia(scan.walls.first().bitmap, tr("I scanned my ${scan.analysis.room.lowercase()} (${scan.walls.size} walls)", "मैंने अपना ${scan.analysis.room} स्कैन किया (${scan.walls.size} दीवारें)"))
+                val marked = scan.analysis.markedPhoto(scan.walls, scan.analysis.findings.firstOrNull()?.photo ?: 0)
+                val reportId = nextMessageId++
+                chatStore.saveReport(reportId, scan.walls, scan.analysis) // opens from the chat later
+                addMessage(AgentChatMessage(id = reportId, text = scan.analysis.asText(), sender = ChatSender.AGENT, image = marked?.asImageBitmap(), hasReport = true))
+                recorder.logLine(AnanyaAgent.NAME, scan.analysis.asText())
+                marked?.let { recorder.savePhoto(it, "Room scan", who = AnanyaAgent.NAME) }
+                voice.speak(tr("I've looked at your room. My notes are in the chat — ask me anything about it.", "मैंने आपका कमरा देख लिया। मेरे सुझाव चैट में हैं — इसके बारे में कुछ भी पूछिए।"))
+            }
+        }
+    }
+
+    // The scan needs the camera, so the call's own camera goes off while it's up.
+    fun startRoomScan() {
+        isVideo = false
+        scanNumber++
+        isScanning = true
+    }
+
     fun clearBoard() {
         if (board.hasUnsavedChanges) saveBoard("You", "Board before clearing")
         board.clear()
@@ -344,7 +415,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     // Ananya thinks or speaks (so she doesn't hear herself) and when muted.
     val callerTurn = hasGreeted && hasMicPermission && agent.isConfigured && !isMuted &&
         !voice.isSpeaking && !isAgentTyping && !isTranscribing &&
-        isResumed && photoToReview == null && videoToReview == null // not while the camera app or a preview is up
+        isResumed && !isScanning && photoToReview == null && videoToReview == null // not while the camera app or a preview is up
     var micOpen by remember { mutableStateOf(false) }
     LaunchedEffect(callerTurn) {
         if (callerTurn) delay(500) // let the speaker's last syllable die away first
@@ -368,6 +439,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     LaunchedEffect(Unit) {
         if (startWithVideo) toggleVideo()
         if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        loadChat()
         withTimeoutOrNull(2500) { snapshotFlow { voice.isReady }.first { it } }
         askAgent { agent.greet().also { hasGreeted = true } }
     }
@@ -383,6 +455,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     DisposableEffect(Unit) {
         onDispose {
             if (board.hasUnsavedChanges) saveBoard("Board", "Board at end of call")
+            saveToChat()
             recorder.finish()
         }
     }
@@ -399,24 +472,14 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         else -> CallStatus.LISTENING
     }
     DarkScreenStatusBar()
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CallTones.Ink)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(VastuPrimary.copy(alpha = 0.22f), Color.Transparent),
-                    center = androidx.compose.ui.geometry.Offset(0f, 0f),
-                    radius = 1400f
-                )
-            )
-    ) {
+    Box(modifier = Modifier.fillMaxSize().agentScreenBackground()) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-            CallHeader(
-                status = status,
-                isSpeaking = voice.isSpeaking,
-                isVideo = isVideo,
-                timer = "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
+            AgentHeader(
+                subtitle = "${status.label} · ${if (isVideo) tr("Video", "वीडियो") else tr("Audio", "ऑडियो")} · " +
+                    "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60),
+                statusDot = { StatusDot(status) },
+                onScanRoom = ::startRoomScan,
+                isSpeaking = voice.isSpeaking
             )
 
             if (isVideo) {
@@ -431,7 +494,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                     CameraViewfinder(viewfinder, Modifier.fillMaxSize())
                     Text(
                         cameraHeading?.let { tr("Camera facing ", "कैमरा की दिशा: ") + CompassDirection.of(it).localName }
-                            ?: tr("${AnanyaAgent.NAME.substringBefore(' ')} sees your camera", "${AnanyaAgent.NAME.substringBefore(' ')} आपका कैमरा देख रही हैं"),
+                            ?: tr("${AnanyaAgent.NAME} sees your camera", "${AnanyaAgent.NAME} आपका कैमरा देख रही हैं"),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -496,17 +559,27 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                     if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     else isMuted = !isMuted
                 },
-                media = ShareMediaActions(takePhoto, pickPhoto, recordVideo),
+                media = ShareMediaActions(takePhoto, pickPhoto, recordVideo, scanRoom = ::startRoomScan),
                 isVideo = isVideo,
                 onToggleVideo = ::toggleVideo,
                 onEndCall = onEndCall
             )
         }
 
+        if (isScanning) {
+            val scanViewModel: RoomScanViewModel = viewModel(key = "call_room_scan_$scanNumber")
+            scanViewModel.onHandOff = ::addRoomScan
+            RoomScanScreen(
+                onClose = { isScanning = false },
+                onAskAgent = { isScanning = false; page = CallPage.CHAT },
+                viewModel = scanViewModel
+            )
+        }
+
         photoToReview?.let { photo ->
             PhotoReviewSheet(
                 photo = photo,
-                agentName = AnanyaAgent.NAME.substringBefore(' '),
+                agentName = AnanyaAgent.NAME,
                 onRetake = {
                     photoToReview = null
                     takePhoto()
@@ -519,7 +592,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         videoToReview?.let { video ->
             VideoReviewSheet(
                 video = video,
-                agentName = AnanyaAgent.NAME.substringBefore(' '),
+                agentName = AnanyaAgent.NAME,
                 onRetake = {
                     video.file.delete()
                     videoToReview = null
@@ -532,48 +605,6 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                 onSend = { question, facing -> sendVideo(video, question, facing) }
             )
         }
-    }
-}
-
-/** Ananya, what she's doing and the call time on one line, and the reply-language switch. */
-@Composable
-private fun CallHeader(status: CallStatus, isSpeaking: Boolean, isVideo: Boolean, timer: String) {
-    val ringColor by animateColorAsState(if (isSpeaking) VastuPrimary else Color.Transparent, label = "ring")
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(46.dp).border(2.dp, ringColor, CircleShape).padding(4.dp)
-        ) {
-            AsyncImage(
-                model = "https://i.pravatar.cc/300?u=${AnanyaAgent.AVATAR_SEED}",
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().clip(CircleShape).background(CallTones.SurfaceRaised)
-            )
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
-            Text(
-                AnanyaAgent.NAME,
-                color = CallTones.TextPrimary,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                StatusDot(status)
-                Text(
-                    "${status.label} · ${if (isVideo) tr("Video", "वीडियो") else tr("Audio", "ऑडियो")} · $timer",
-                    color = CallTones.TextMuted,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 6.dp)
-                )
-            }
-        }
-        LanguageSwitch()
     }
 }
 
@@ -678,7 +709,7 @@ private fun BoardPage(
             Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (line != null) {
                     Text(
-                        if (line.sender == ChatSender.AGENT) AnanyaAgent.NAME.substringBefore(' ').uppercase() else "YOU",
+                        if (line.sender == ChatSender.AGENT) AnanyaAgent.NAME.uppercase() else "YOU",
                         color = if (line.sender == ChatSender.AGENT) VastuSaffron else CallTones.TextMuted,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,

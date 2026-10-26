@@ -10,24 +10,33 @@ import com.vastutalks.app.ui.components.AgentChatMessage
 import com.vastutalks.app.ui.components.ChatSender
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import java.io.File
 import java.util.concurrent.Executors
 
 /**
  * Keeps the text chat with Ananya on the phone, so it's still there next
  * time and she picks up where she left off. Saves three things in the
- * app's private storage (filesDir/agent_chat/):
+ * app's private storage (filesDir/agent_chat/<uid>/):
  *  - the chat as shown: every message, its images as JPEGs;
  *  - the conversation as the model sees it (VastuAgent.exportHistory),
  *    which includes her marks, so follow-up questions have the context;
  *  - the last photo or video frames she can still mark up.
  *
- * Writes happen in order on one background thread.
+ * The call with her saves into the same chat, so what was said on a
+ * call is there in the chat afterwards (and the other way round).
+ *
+ * Writes from every instance happen in order on one background thread.
  */
 class AgentChatStore(context: Context) {
-    private val dir = File(context.applicationContext.filesDir, "agent_chat")
+    // One chat per account, so signing in with another account on this phone doesn't show the last one's.
+    private val dir = File(
+        context.applicationContext.filesDir,
+        "agent_chat/" + (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "signed_out")
+    )
     private val chatFile = File(dir, "chat.json")
-    private val io = Executors.newSingleThreadExecutor()
 
     class Saved(val messages: List<AgentChatMessage>, val history: String, val markable: List<Bitmap>)
 
@@ -53,8 +62,11 @@ class AgentChatStore(context: Context) {
         Saved(messages, json.optString("history", "[]"), markable)
     }.onFailure { Log.w(TAG, "Couldn't load the saved chat", it) }.getOrNull()
 
-    /** Saves the chat and the model's history. Images already on disk aren't written again. */
-    fun save(messages: List<AgentChatMessage>, history: String, markableCount: Int) {
+    /**
+     * Saves the chat and the model's history. Images already on disk aren't
+     * written again. [fromCall] tells an open chat screen to reload it.
+     */
+    fun save(messages: List<AgentChatMessage>, history: String, markableCount: Int, fromCall: Boolean = false) {
         val snapshot = messages.toList()
         io.execute {
             runCatching {
@@ -81,6 +93,7 @@ class AgentChatStore(context: Context) {
                 val tmp = File(dir, "chat.json.tmp")
                 tmp.writeText(json.toString())
                 tmp.renameTo(chatFile)
+                if (fromCall) _callSaves.update { it + 1 }
             }.onFailure { Log.w(TAG, "Couldn't save the chat", it) }
         }
     }
@@ -138,7 +151,11 @@ class AgentChatStore(context: Context) {
     private fun markableName(i: Int) = "markable_$i.jpg"
     private fun reportName(messageId: Int) = "report_$messageId"
 
-    private companion object {
-        const val TAG = "AgentChatStore"
+    companion object {
+        private const val TAG = "AgentChatStore"
+        private val io = Executors.newSingleThreadExecutor()
+        private val _callSaves = MutableStateFlow(0)
+        /** Bumped once each save from a call is on disk. */
+        val callSaves: StateFlow<Int> get() = _callSaves
     }
 }

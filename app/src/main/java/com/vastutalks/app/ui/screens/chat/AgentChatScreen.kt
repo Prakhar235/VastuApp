@@ -5,26 +5,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -42,17 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.vastutalks.app.data.ai.AgentChatStore
-import com.vastutalks.app.data.ai.AgentLanguage
-import com.vastutalks.app.data.ai.AgentLanguagePref
 import com.vastutalks.app.data.ai.AgentMode
 import com.vastutalks.app.data.ai.AgentTurn
 import com.vastutalks.app.data.ai.PhotoFacing
@@ -62,6 +49,9 @@ import com.vastutalks.app.data.ai.VastuAgent
 import com.vastutalks.app.data.model.AnanyaAgent
 import com.vastutalks.app.ui.components.AgentChatMessage
 import com.vastutalks.app.ui.components.AgentChatPage
+import com.vastutalks.app.ui.components.AgentHeader
+import com.vastutalks.app.ui.components.AgentHeaderButton
+import com.vastutalks.app.ui.components.agentScreenBackground
 import com.vastutalks.app.ui.components.CallTones
 import com.vastutalks.app.ui.components.CapturedPhoto
 import com.vastutalks.app.ui.components.CapturedVideo
@@ -74,8 +64,8 @@ import com.vastutalks.app.ui.components.rememberPhotoCapture
 import com.vastutalks.app.ui.components.rememberPhotoPicker
 import com.vastutalks.app.ui.components.rememberVideoCapture
 import com.vastutalks.app.ui.theme.OnlineGreen
-import com.vastutalks.app.ui.theme.VastuPrimary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,10 +104,7 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) { store.load() }
             if (saved != null && saved.messages.isNotEmpty()) {
-                messages.addAll(saved.messages)
-                nextId = saved.messages.maxOf { it.id } + 1
-                agent.restore(saved.history, saved.markable)
-                savedMarkable = agent.markableImages
+                show(saved)
                 isLoaded = true
             } else {
                 isLoaded = true
@@ -125,6 +112,24 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
             }
             RoomScanHandoff.pending.filterNotNull().collect { RoomScanHandoff.take()?.let(::addRoomScan) }
         }
+        // A call started from this chat added to it: pick that up for when they come back.
+        viewModelScope.launch {
+            AgentChatStore.callSaves.drop(1).collect {
+                val saved = withContext(Dispatchers.IO) { store.load() } ?: return@collect
+                turnLock.withLock {
+                    chatGeneration++ // drop a reply still on its way to the chat as it was
+                    show(saved)
+                }
+            }
+        }
+    }
+
+    private fun show(saved: AgentChatStore.Saved) {
+        messages.clear()
+        messages.addAll(saved.messages)
+        nextId = (saved.messages.maxOfOrNull { it.id } ?: -1) + 1
+        agent.restore(saved.history, saved.markable)
+        savedMarkable = agent.markableImages
     }
 
     /** Puts a finished room scan into the chat and into her memory of it. */
@@ -244,7 +249,7 @@ fun AgentChatScreen(
     val recordVideo = rememberVideoCapture(onError = toast, onCaptured = { videoToReview = it })
 
     DarkScreenStatusBar()
-    Box(modifier = Modifier.fillMaxSize().background(CallTones.Ink)) {
+    Box(modifier = Modifier.fillMaxSize().agentScreenBackground()) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
             ChatHeader(
                 isTyping = viewModel.pendingTurns > 0,
@@ -264,8 +269,8 @@ fun AgentChatScreen(
                 media = ShareMediaActions(takePhoto, pickPhoto, recordVideo, scanRoom = onScanRoom),
                 onOpenReport = { onOpenReport(it.id) },
                 emptyHint = tr(
-                    "Ask a question, send a photo of any room, or scan a whole room — ${AnanyaAgent.NAME.substringBefore(' ')} marks her Vastu suggestions right on the photo.",
-                    "सवाल पूछें, किसी कमरे की फ़ोटो भेजें या पूरा कमरा स्कैन करें — ${AnanyaAgent.NAME.substringBefore(' ')} फ़ोटो पर ही निशान लगाकर वास्तु सुझाव देंगी।"
+                    "Ask a question, send a photo of any room, or scan a whole room — ${AnanyaAgent.NAME} marks her Vastu suggestions right on the photo.",
+                    "सवाल पूछें, किसी कमरे की फ़ोटो भेजें या पूरा कमरा स्कैन करें — ${AnanyaAgent.NAME} फ़ोटो पर ही निशान लगाकर वास्तु सुझाव देंगी।"
                 ),
                 modifier = Modifier.weight(1f)
             )
@@ -275,7 +280,7 @@ fun AgentChatScreen(
             AlertDialog(
                 onDismissRequest = { confirmNewChat = false },
                 title = { Text(tr("Start a new chat?", "नई चैट शुरू करें?")) },
-                text = { Text(tr("The old chat and ${AnanyaAgent.NAME.substringBefore(' ')}'s memory of it will both be cleared.", "पुरानी चैट और ${AnanyaAgent.NAME.substringBefore(' ')} को उसकी याद, दोनों मिट जाएँगी।")) },
+                text = { Text(tr("The old chat and ${AnanyaAgent.NAME}'s memory of it will both be cleared.", "पुरानी चैट और ${AnanyaAgent.NAME} को उसकी याद, दोनों मिट जाएँगी।")) },
                 confirmButton = {
                     TextButton(onClick = { confirmNewChat = false; viewModel.startNewChat() }) { Text(tr("New chat", "नई चैट")) }
                 },
@@ -286,7 +291,7 @@ fun AgentChatScreen(
         photoToReview?.let { photo ->
             PhotoReviewSheet(
                 photo = photo,
-                agentName = AnanyaAgent.NAME.substringBefore(' '),
+                agentName = AnanyaAgent.NAME,
                 onRetake = { photoToReview = null; takePhoto() },
                 onDismiss = { photoToReview = null },
                 onSend = { question, facing ->
@@ -299,7 +304,7 @@ fun AgentChatScreen(
         videoToReview?.let { video ->
             VideoReviewSheet(
                 video = video,
-                agentName = AnanyaAgent.NAME.substringBefore(' '),
+                agentName = AnanyaAgent.NAME,
                 onRetake = { video.file.delete(); videoToReview = null; recordVideo() },
                 onDismiss = { video.file.delete(); videoToReview = null },
                 onSend = { question, facing ->
@@ -313,50 +318,19 @@ fun AgentChatScreen(
 }
 
 /**
- * Back, Ananya, then room scan, call, and a menu with the reply
- * language and "New chat". Kept to one line so it fits narrow phones.
+ * The shared [AgentHeader] (room scan and reply language, same as the
+ * call), with call and a menu holding "New chat".
  */
 @Composable
 private fun ChatHeader(isTyping: Boolean, onBack: () -> Unit, onCall: () -> Unit, onScanRoom: () -> Unit, onNewChat: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    AgentHeader(
+        subtitle = if (isTyping) tr("Typing…", "लिख रही हैं…") else tr("AI Vastu expert", "AI वास्तु विशेषज्ञ"),
+        statusDot = { Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(OnlineGreen)) },
+        onScanRoom = onScanRoom,
+        onBack = onBack
     ) {
-        Box(
-            modifier = Modifier.size(44.dp).clip(CircleShape).clickable { onBack() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "वापस"), tint = CallTones.TextPrimary)
-        }
-        AsyncImage(
-            model = "https://i.pravatar.cc/300?u=${AnanyaAgent.AVATAR_SEED}",
-            contentDescription = null,
-            modifier = Modifier.size(40.dp).clip(CircleShape).background(CallTones.SurfaceRaised)
-        )
-        Column(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 4.dp)) {
-            Text(
-                AnanyaAgent.NAME,
-                color = CallTones.TextPrimary,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(OnlineGreen))
-                Text(
-                    if (isTyping) tr("Typing…", "लिख रही हैं…") else tr("AI Vastu expert", "AI वास्तु विशेषज्ञ"),
-                    color = CallTones.TextMuted,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 6.dp)
-                )
-            }
-        }
-        HeaderIconButton(Icons.Outlined.Explore, tr("Scan a room", "कमरा स्कैन करें"), onClick = onScanRoom)
         if (AnanyaAgent.CALL_ENABLED) {
-            HeaderIconButton(Icons.Filled.Call, tr("Call ${AnanyaAgent.NAME}", "${AnanyaAgent.NAME} को कॉल करें"), onClick = onCall)
+            AgentHeaderButton(Icons.Filled.Call, tr("Call ${AnanyaAgent.NAME}", "${AnanyaAgent.NAME} को कॉल करें"), onClick = onCall)
         }
         Box {
             var menuOpen by remember { mutableStateOf(false) }
@@ -372,27 +346,6 @@ private fun ChatHeader(isTyping: Boolean, onBack: () -> Unit, onCall: () -> Unit
                 containerColor = CallTones.SurfaceRaised,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(
-                    tr("Reply language", "जवाब की भाषा"),
-                    color = CallTones.TextMuted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                )
-                listOf(AgentLanguage.ENGLISH to "English", AgentLanguage.HINDI to "हिंदी").forEach { (language, label) ->
-                    val selected = AgentLanguagePref.current == language
-                    DropdownMenuItem(
-                        text = { Text(label, color = CallTones.TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = if (selected) VastuPrimary else androidx.compose.ui.graphics.Color.Transparent
-                            )
-                        },
-                        onClick = { menuOpen = false; AgentLanguagePref.set(language) }
-                    )
-                }
-                HorizontalDivider(color = CallTones.Hairline)
                 DropdownMenuItem(
                     text = { Text(tr("New chat", "नई चैट"), color = CallTones.TextPrimary) },
                     leadingIcon = { Icon(Icons.Outlined.EditNote, contentDescription = null, tint = CallTones.TextPrimary) },
@@ -400,20 +353,5 @@ private fun ChatHeader(isTyping: Boolean, onBack: () -> Unit, onCall: () -> Unit
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .padding(horizontal = 2.dp)
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(CallTones.SurfaceRaised)
-            .clickable(onClickLabel = description, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, contentDescription = description, tint = CallTones.TextPrimary, modifier = Modifier.size(20.dp))
     }
 }

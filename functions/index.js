@@ -47,6 +47,7 @@ exports.onCallRequestCreated = onDocumentCreated("callRequests/{callId}", async 
     token: fcmToken,
     data: {
       type: "incoming_call",
+      toUid: call.calleeUid,
       callId: event.params.callId,
       callerName: call.callerName || "Someone",
       channelName: call.channelName || "",
@@ -161,7 +162,7 @@ async function notify(toUid, { type, postId, actor, title, body }) {
     // notification itself so tapping it can open the post.
     await admin.messaging().send({
       token: fcmToken,
-      data: { type: "post_activity", postId, title, body },
+      data: { type: "post_activity", toUid, postId, title, body },
       android: { priority: "high" },
     });
   } catch (e) {
@@ -290,6 +291,7 @@ exports.onChatMessageCreated = onDocumentCreated("chats/{chatId}/messages/{messa
       token: fcmToken,
       data: {
         type: "chat",
+        toUid: recipient,
         chatId,
         senderUid: message.senderUid,
         senderName,

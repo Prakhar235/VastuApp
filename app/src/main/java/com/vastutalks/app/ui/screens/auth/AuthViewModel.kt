@@ -2,7 +2,6 @@ package com.vastutalks.app.ui.screens.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.messaging.FirebaseMessaging
 import com.vastutalks.app.data.model.UserRole
 import com.vastutalks.app.data.repository.AuthRepository
 import com.vastutalks.app.data.repository.ExpertDetails
@@ -14,7 +13,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.tasks.await
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -49,7 +47,6 @@ class AuthViewModel(
             result.fold(
                 onSuccess = {
                     _uiState.value = AuthUiState(isLoading = false)
-                    saveFcmTokenBestEffort()
                     onSuccess()
                 },
                 onFailure = { e ->
@@ -91,16 +88,21 @@ class AuthViewModel(
                     "Account created, but saving your profile failed: ${it.message}"
                 }
             )
-            saveFcmTokenBestEffort()
             onSuccess()
         }
     }
 
-    /** Best-effort — a missed token save just means this device won't ring for incoming calls until the next sign-in. */
-    private suspend fun saveFcmTokenBestEffort() {
-        runCatching {
-            val token = FirebaseMessaging.getInstance().token.await()
-            userRepository.saveFcmToken(token)
+    /** Sends a reset link to [email]; [onResult] gets the message to show. */
+    fun sendPasswordReset(email: String, onResult: (String) -> Unit) {
+        if (email.isBlank()) {
+            onResult("Enter your email above, then tap Forgot password.")
+            return
+        }
+        viewModelScope.launch {
+            authRepository.sendPasswordReset(email).fold(
+                onSuccess = { onResult("Password reset link sent to ${email.trim()}.") },
+                onFailure = { onResult(it.message ?: "Couldn't send the reset link.") }
+            )
         }
     }
 

@@ -8,7 +8,7 @@ package com.vastutalks.app.data.model
  */
 object AnanyaAgent {
     const val ID = "ai-agent-ananya"
-    const val NAME = "Ananya Verma"
+    const val NAME = "Vastu Expert"
     const val SPECIALTY = "Residential Vastu"
     /** Seeds her pravatar.cc picture; changing it changes her face. */
     const val AVATAR_SEED = "demo-expert-ananya"

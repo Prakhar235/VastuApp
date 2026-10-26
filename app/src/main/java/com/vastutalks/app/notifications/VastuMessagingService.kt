@@ -52,8 +52,13 @@ class VastuMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val data = message.data
+        // Meant for another account that used this phone (or nobody is signed in): not for whoever is here now.
+        val me = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
+        data["toUid"]?.let { if (it != me) return }
         if (data["type"] == "chat") {
             val chatId = data["chatId"] ?: return
+            // A chat id is its two uids: not one of ours, so it's for an account that used this phone before.
+            if (me !in chatId.split("_")) return
             // Already reading this chat: the message is on screen.
             if (ChatRepository.openChatId == chatId) return
             showChatNotification(chatId, data["senderUid"] ?: return, data["senderName"].orEmpty(), data["body"].orEmpty())

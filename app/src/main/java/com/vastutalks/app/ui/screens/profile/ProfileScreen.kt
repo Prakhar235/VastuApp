@@ -33,7 +33,17 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
+import com.vastutalks.app.data.ai.AgentChatStore
+import com.vastutalks.app.data.ai.AgentLanguage
+import com.vastutalks.app.data.ai.AgentLanguagePref
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -72,13 +82,18 @@ private enum class ProfileTab { PROFILE, HISTORY }
 fun ProfileScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     profileViewModel: ProfileViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    var editingDetails by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val uiState by profileViewModel.uiState.collectAsState()
     val user = profileViewModel.currentUser
     var selectedTab by remember { mutableStateOf(ProfileTab.PROFILE) }
 
-    val displayName = user?.displayName?.takeIf { it.isNotBlank() } ?: "Vastu Talks user"
+    val displayName = uiState.profile?.name?.takeIf { it.isNotBlank() }
+        ?: user?.displayName?.takeIf { it.isNotBlank() } ?: "Vastu Talks user"
     val email = user?.email ?: "No email on file"
 
     Column(
@@ -194,19 +209,30 @@ fun ProfileScreen(
                 item { SectionHeader("ACCOUNT") }
                 item {
                     SettingsGroup {
-                        SettingsRow(Icons.Filled.Person, "Edit Profile")
+                        SettingsRow(Icons.Filled.Person, "Edit Profile") { editingDetails = true }
                         SettingsDivider()
-                        SettingsRow(Icons.Filled.Notifications, "Notifications", badgeCount = 3)
+                        SettingsRow(
+                            Icons.Filled.Notifications,
+                            "Notifications",
+                            badgeCount = uiState.unreadNotifications.takeIf { it > 0 },
+                            onClick = onOpenNotifications
+                        )
                         SettingsDivider()
-                        SettingsRow(Icons.Filled.Settings, "Settings")
+                        SettingsRow(Icons.Filled.Settings, "Settings") { showSettings = true }
                     }
                 }
-                item { SectionHeader("PAYMENT & BILLING") }
+                item { SectionHeader(if (CallPricing.PAID_CALLS) "PAYMENT & BILLING" else "ACTIVITY") }
                 item {
                     SettingsGroup {
-                        SettingsRow(Icons.Filled.CreditCard, "Payment Methods")
-                        SettingsDivider()
-                        SettingsRow(Icons.Filled.History, "Transaction History")
+                        if (CallPricing.PAID_CALLS) {
+                            SettingsRow(Icons.Filled.CreditCard, "Payment Methods") {
+                                android.widget.Toast.makeText(context, "Payments aren't set up yet — calls are free for now.", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            SettingsDivider()
+                        }
+                        SettingsRow(Icons.Filled.History, if (CallPricing.PAID_CALLS) "Transaction History" else "Call History") {
+                            selectedTab = ProfileTab.HISTORY
+                        }
                     }
                 }
                 item {
@@ -268,6 +294,22 @@ fun ProfileScreen(
             }
         }
     }
+
+    if (editingDetails) {
+        EditDetailsDialog(
+            name = displayName,
+            phone = uiState.profile?.phone.orEmpty(),
+            saving = uiState.savingDetails,
+            onDismiss = { editingDetails = false },
+            onSave = { name, phone ->
+                profileViewModel.updateDetails(name, phone) { error ->
+                    if (error == null) editingDetails = false
+                    android.widget.Toast.makeText(context, error ?: "Profile saved", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+    if (showSettings) SettingsDialog(onDismiss = { showSettings = false })
 }
 
 @Composable
@@ -302,12 +344,11 @@ private fun SettingsGroup(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, badgeCount: Int? = null) {
+private fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, badgeCount: Int? = null, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // Not wired yet — these all need dedicated screens (see README).
-            .clickable { }
+            .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -333,6 +374,81 @@ private fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, l
             Box(modifier = Modifier.width(8.dp))
         }
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** Name and phone. */
+@Composable
+private fun EditDetailsDialog(name: String, phone: String, saving: Boolean, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+    var newName by remember { mutableStateOf(name) }
+    var newPhone by remember { mutableStateOf(phone) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit profile") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(
+                    value = newPhone,
+                    onValueChange = { newPhone = it },
+                    label = { Text("Phone") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !saving, onClick = { onSave(newName, newPhone) }) { Text(if (saving) "Saving…" else "Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** The Vastu Expert's reply language, phone notification settings, and clearing the AI chat. */
+@Composable
+private fun SettingsDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var confirmClear by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Vastu Expert replies in", fontSize = 13.sp, color = TextSecondary)
+                listOf(AgentLanguage.ENGLISH to "English", AgentLanguage.HINDI to "हिंदी (Hindi)").forEach { (language, label) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { AgentLanguagePref.set(language) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = AgentLanguagePref.current == language, onClick = { AgentLanguagePref.set(language) })
+                        Text(label, fontSize = 15.sp)
+                    }
+                }
+                Box(modifier = Modifier.height(8.dp))
+                TextButton(onClick = {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    runCatching { context.startActivity(intent) }
+                }) { Text("Notification settings") }
+                TextButton(onClick = { confirmClear = true }) { Text("Clear Vastu Expert chat", color = Danger) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Clear the chat?") },
+            text = { Text("Your chat with the Vastu Expert, and what she remembers of it, will be deleted from this phone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    AgentChatStore(context).clear()
+                    confirmClear = false
+                    android.widget.Toast.makeText(context, "Chat cleared", android.widget.Toast.LENGTH_SHORT).show()
+                }) { Text("Clear", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
+        )
     }
 }
 

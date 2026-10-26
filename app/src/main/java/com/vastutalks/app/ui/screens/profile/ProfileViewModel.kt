@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.vastutalks.app.data.model.CallHistoryEntry
 import com.vastutalks.app.data.model.UserProfile
 import com.vastutalks.app.data.repository.CallHistoryRepository
+import com.vastutalks.app.data.repository.NotificationRepository
 import com.vastutalks.app.data.repository.ProfilePhotos
 import com.vastutalks.app.data.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +24,10 @@ data class ProfileUiState(
     /** users/{uid}: phone and photo (name/email come from Firebase Auth). */
     val profile: UserProfile? = null,
     /** A photo just picked, shown while it saves. */
-    val pendingPhoto: android.graphics.Bitmap? = null
+    val pendingPhoto: android.graphics.Bitmap? = null,
+    /** For the badge on Notifications. */
+    val unreadNotifications: Int = 0,
+    val savingDetails: Boolean = false
 )
 
 class ProfileViewModel(
@@ -42,6 +46,13 @@ class ProfileViewModel(
         loadHistory()
         viewModelScope.launch {
             runCatching {
+                NotificationRepository().listen().collect { list ->
+                    _uiState.value = _uiState.value.copy(unreadNotifications = list.count { !it.read })
+                }
+            }
+        }
+        viewModelScope.launch {
+            runCatching {
                 userRepository.listenMyProfile().collect { _uiState.value = _uiState.value.copy(profile = it) }
             }
         }
@@ -56,6 +67,20 @@ class ProfileViewModel(
                 pendingPhoto = null,
                 errorMessage = result.exceptionOrNull()?.let { "Couldn't save your photo: ${it.message}" } ?: _uiState.value.errorMessage
             )
+        }
+    }
+
+    /** Saves a new name and phone; [onDone] gets an error message, or null when saved. */
+    fun updateDetails(name: String, phone: String, onDone: (String?) -> Unit) {
+        if (name.isBlank()) {
+            onDone("Enter your name.")
+            return
+        }
+        _uiState.value = _uiState.value.copy(savingDetails = true)
+        viewModelScope.launch {
+            val result = userRepository.updateNameAndPhone(name.trim(), phone.trim())
+            _uiState.value = _uiState.value.copy(savingDetails = false)
+            onDone(result.exceptionOrNull()?.let { "Couldn't save: ${it.message}" })
         }
     }
 

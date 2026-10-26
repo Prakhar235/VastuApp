@@ -6,6 +6,14 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,7 +109,6 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
-    onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit = {},
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit = { _, _, _ -> },
@@ -247,7 +254,6 @@ fun HomeScreen(
                 onLike = homeViewModel::toggleLike,
                 onOpenPost = onOpenPost,
                 expertsError = uiState.expertsError,
-                onSearchClick = onSearchClick,
                 onCallExpert = onCallExpert,
                 onExpertCardClick = onExpertCardClick,
                 onCallAgent = onCallAgent,
@@ -527,7 +533,6 @@ private fun NormalUserHome(
     onLike: (String) -> Unit,
     onOpenPost: (String) -> Unit,
     expertsError: String?,
-    onSearchClick: () -> Unit,
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit,
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
     onCallAgent: () -> Unit,
@@ -535,9 +540,28 @@ private fun NormalUserHome(
     onChatExpert: (expertId: String, expertName: String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.EXPERTS) }
+    var query by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    val terms = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val shownExperts = if (terms.isEmpty()) liveExperts else liveExperts.filter { expert ->
+        val haystack = "${expert.name} ${expert.specialty} ${expert.city} ${expert.bio}".lowercase()
+        terms.all { it in haystack }
+    }
+    val shownPosts = if (terms.isEmpty()) posts else posts.filter { post ->
+        val haystack = "${post.text} ${post.authorName} ${post.authorSpecialty}".lowercase()
+        terms.all { it in haystack }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Search bar
+        // Ananya, the AI Vastu agent — always available, no human
+        // expert needs to be online. Chat or call her (the call can
+        // switch between audio and video); both offer the room scan.
+        AnanyaCard(onChat = onChatAgent, onCall = onCallAgent)
+
+        Box(modifier = Modifier.height(12.dp))
+
+        // Search: narrows the open tab — experts by name, specialty or
+        // city; posts by their text or author.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -545,13 +569,33 @@ private fun NormalUserHome(
                 .height(48.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.White)
-                .clickable { onSearchClick() }
-                .padding(horizontal = 16.dp),
+                .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Outlined.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
-            Box(modifier = Modifier.padding(start = 10.dp)) {
-                Text("Search by name or specialty", color = TextSecondary, fontSize = 14.sp)
+            Box(modifier = Modifier.weight(1f).padding(start = 10.dp), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) {
+                    Text(
+                        if (selectedTab == HomeTab.EXPERTS) "Search by name, specialty or city" else "Search posts",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 14.sp, color = Color(0xFF2B2B2B)),
+                    cursorBrush = SolidColor(VastuPrimary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { query = ""; focusManager.clearFocus() }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                }
             }
         }
 
@@ -581,9 +625,9 @@ private fun NormalUserHome(
         Box(modifier = Modifier.height(16.dp))
 
         when (selectedTab) {
-            HomeTab.EXPERTS -> ExpertsTabContent(liveExperts, now, expertsError, onCallExpert, onExpertCardClick, onCallAgent, onChatAgent, onChatExpert)
+            HomeTab.EXPERTS -> ExpertsTabContent(shownExperts, now, expertsError, onCallExpert, onExpertCardClick, onChatExpert, searching = terms.isNotEmpty())
             HomeTab.POSTS -> PostsFeed(
-                posts,
+                shownPosts,
                 likedPostIds = likedPostIds,
                 onLike = onLike,
                 onOpenPost = onOpenPost,
@@ -617,7 +661,7 @@ private fun AnanyaCard(onChat: () -> Unit, onCall: () -> Unit) {
                 Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
             }
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text("Ananya — AI Vastu expert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
+                Text("Ask Vastu Expert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
                 Text("Available anytime · English or Hindi · share room photos", fontSize = 11.sp, color = TextSecondary)
             }
         }
@@ -656,9 +700,8 @@ private fun ExpertsTabContent(
     expertsError: String?,
     onCallExpert: (expertId: String, expertName: String, callType: CallType) -> Unit,
     onExpertCardClick: (expertId: String, expertName: String) -> Unit,
-    onCallAgent: () -> Unit,
-    onChatAgent: () -> Unit,
-    onChatExpert: (expertId: String, expertName: String) -> Unit
+    onChatExpert: (expertId: String, expertName: String) -> Unit,
+    searching: Boolean = false
 ) {
     Column {
         Box(
@@ -687,14 +730,6 @@ private fun ExpertsTabContent(
             }
         }
 
-        Box(modifier = Modifier.height(12.dp))
-
-        // Ananya, the AI Vastu agent — always available, no human
-        // expert needs to be online. Chat or call her (the call can
-        // switch between audio and video).
-        // The room scan lives in her chat.
-        AnanyaCard(onChat = onChatAgent, onCall = onCallAgent)
-
         Box(modifier = Modifier.height(20.dp))
 
         LazyColumn(
@@ -713,7 +748,7 @@ private fun ExpertsTabContent(
             } else if (liveExperts.isEmpty()) {
                 item {
                     Text(
-                        "No experts have joined yet — check back soon.",
+                        if (searching) "No experts match your search." else "No experts have joined yet — check back soon.",
                         fontSize = 13.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(vertical = 4.dp)
