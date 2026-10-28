@@ -86,7 +86,9 @@ enum AgentCallStatus {
 /// room — she answers with her suggestions marked on it. On video, every
 /// turn carries what the camera shows (and which way it faces), so she sees
 /// what the caller sees. Everything said, every photo and video is saved
-/// as the call goes (AgentCallRecorder).
+/// as the call goes (AgentCallRecorder). The call continues the saved chat
+/// with her and saves back into it (AgentChatStore), and a room scan can
+/// run right inside the call.
 @MainActor
 final class AgentCallViewModel: ObservableObject {
     @Published var page = VastuAgent.boardEnabled ? AgentCallPage.board : .chat
@@ -108,6 +110,8 @@ final class AgentCallViewModel: ObservableObject {
     /// The camera or gallery picker is showing.
     @Published var mediaSource: MediaSource? { didSet { updateMic() } }
     @Published var isAppActive = true { didSet { updateMic() } }
+    /// The room scan on screen, if one was started in this call.
+    @Published var roomScan: RoomScanViewModel? { didSet { updateMic() } }
     /// The caller's camera is live on screen and goes along with each turn.
     @Published private(set) var isVideo = false
     @Published var toast: String?
@@ -119,6 +123,12 @@ final class AgentCallViewModel: ObservableObject {
     private let voice = AgentVoice()
     private let listener = CallerListener()
     private let recorder = AgentCallRecorder()
+    private let chatStore = AgentChatStore()
+    private var nextMessageId = 0
+    /// False until the saved chat is read, so it's never overwritten before then.
+    private var chatLoaded = false
+    private var savedMarkable: [UIImage] = []
+    private var saveChain: Task<Void, Never>?
     private var turnChain: Task<Void, Never>?
     private var micTask: Task<Void, Never>?
     private var micTarget = false
@@ -161,6 +171,9 @@ final class AgentCallViewModel: ObservableObject {
         }
         if withVideo { toggleVideo() }
 
+        // The saved chat goes ahead of the call, and gives her its memory.
+        turnChain = Task { [weak self] in await self?.loadChat() }
+
         // Ananya picks up and greets the caller.
         askAgent { [agent] in
             let turn = await agent.greet()
@@ -187,6 +200,7 @@ final class AgentCallViewModel: ObservableObject {
         turnChain?.cancel()
         heading.stop()
         if board.hasUnsavedChanges { saveBoard(who: "Board", caption: "Board at end of call") }
+        saveToChat()
         recorder.finish()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -196,7 +210,7 @@ final class AgentCallViewModel: ObservableObject {
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 DispatchQueue.main.async {
                     self.hasMicPermission = granted
-                    if !granted { self.toast = tr("Turn on microphone access for Vastu Talks in Settings to talk to Ananya.", "अनन्या से बात करने के लिए सेटिंग्स में Vastu Talks के लिए माइक चालू करें।") }
+                    if !granted { self.toast = tr("Turn on microphone access for Vastu Talks in Settings to talk to \(AnanyaAgent.name).", "\(AnanyaAgent.name) से बात करने के लिए सेटिंग्स में Vastu Talks के लिए माइक चालू करें।") }
                 }
             }
         } else {
@@ -235,7 +249,8 @@ final class AgentCallViewModel: ObservableObject {
     /// Ananya thinks or speaks (so she doesn't hear herself) and when muted.
     private var callerTurn: Bool {
         hasGreeted && hasMicPermission && agent.isConfigured && !isMuted && !isSpeaking && !isAgentTyping &&
-            !isTranscribing && isAppActive && photoToReview == nil && videoToReview == nil && mediaSource == nil && !finished
+            !isTranscribing && isAppActive && photoToReview == nil && videoToReview == nil && mediaSource == nil &&
+            roomScan == nil && !finished
     }
 
     private func updateMic() {
@@ -264,9 +279,44 @@ final class AgentCallViewModel: ObservableObject {
         }
     }
 
-    private func addMessage(_ text: String, sender: ChatSender, image: UIImage? = nil) {
-        messages.append(AgentChatMessage(id: messages.count, text: text, sender: sender, image: image))
+    private func addMessage(_ text: String, sender: ChatSender, image: UIImage? = nil, hasReport: Bool = false) {
+        messages.append(AgentChatMessage(id: nextMessageId, text: text, sender: sender, image: image, hasReport: hasReport))
+        nextMessageId += 1
         if page != .chat && sender == .agent { unread += 1 }
+        // Her replies come once her history has the turn, so save then (the caller's line goes with it).
+        if sender == .agent { saveToChat() }
+    }
+
+    /// Puts the saved chat ahead of the call and gives her its memory.
+    private func loadChat() async {
+        let store = chatStore
+        if let saved = await Task.detached(operation: { store.load() }).value {
+            await agent.restore(historyJson: saved.history, images: saved.markable)
+            savedMarkable = saved.markable
+            let early = messages // anything typed while it loaded
+            messages = saved.messages
+            nextMessageId = (saved.messages.map(\.id).max() ?? -1) + 1
+            early.forEach { addMessage($0.text, sender: $0.sender, image: $0.image, hasReport: $0.hasReport) }
+        }
+        chatLoaded = true
+    }
+
+    /// Writes the call so far into the saved chat.
+    private func saveToChat() {
+        guard chatLoaded else { return }
+        let snapshot = messages
+        let previous = saveChain
+        saveChain = Task { [self] in
+            await previous?.value
+            let images = await agent.markable
+            let history = await agent.exportHistory()
+            let unchanged = images.count == savedMarkable.count && zip(images, savedMarkable).allSatisfy { $0 === $1 }
+            if !unchanged {
+                chatStore.saveMarkable(images)
+                savedMarkable = images
+            }
+            chatStore.save(messages: snapshot, history: history, markableCount: images.count, fromCall: true)
+        }
     }
 
     private func postAgentTurn(_ turn: AgentTurn) {
@@ -345,8 +395,39 @@ final class AgentCallViewModel: ObservableObject {
         ShareMediaActions(
             takePhoto: { [weak self] in self?.openMedia(.camera) },
             pickPhoto: { [weak self] in self?.openMedia(.gallery) },
-            recordVideo: { [weak self] in self?.openMedia(.video) }
+            recordVideo: { [weak self] in self?.openMedia(.video) },
+            scanRoom: { [weak self] in self?.startRoomScan() }
         )
+    }
+
+    // MARK: Room scan
+
+    /// The scan needs the camera, so the call's own camera goes off while it's up.
+    func startRoomScan() {
+        if isVideo { toggleVideo() }
+        let scan = RoomScanViewModel()
+        scan.onHandOff = { [weak self] in self?.addRoomScan($0) }
+        roomScan = scan
+    }
+
+    /// Puts a finished room scan into the call's chat and into her memory of it.
+    private func addRoomScan(_ scan: RoomScanHandoff.Scan) {
+        guard let first = scan.walls.first else { return }
+        let previous = turnChain
+        turnChain = Task { [weak self] in
+            await previous?.value
+            guard let self = self, !self.finished else { return }
+            await self.agent.attachRoomScan(walls: scan.walls, analysis: scan.analysis)
+            self.postMedia(first.image, caption: tr("I scanned my \(scan.analysis.room.lowercased()) (\(scan.walls.count) walls)",
+                                                    "मैंने अपना \(scan.analysis.room) स्कैन किया (\(scan.walls.count) दीवारें)"))
+            let marked = scan.analysis.markedPhoto(walls: scan.walls, photo: scan.analysis.findings.first?.photo ?? 0)
+            self.chatStore.saveReport(messageId: self.nextMessageId, walls: scan.walls, analysis: scan.analysis) // opens from the chat later
+            self.addMessage(scan.analysis.asText(), sender: .agent, image: marked?.scaledDown(toMaxSide: 1024), hasReport: true)
+            self.recorder.logLine(AnanyaAgent.name, scan.analysis.asText())
+            if let marked = marked { self.recorder.savePhoto(marked, caption: "Room scan", who: AnanyaAgent.name) }
+            self.voice.speak(tr("I've looked at your room. My notes are in the chat — ask me anything about it.",
+                                "मैंने आपका कमरा देख लिया। मेरे सुझाव चैट में हैं — इसके बारे में कुछ भी पूछिए।"))
+        }
     }
 
     func openMedia(_ source: MediaSource) {
@@ -406,13 +487,16 @@ struct AgentInCallView: View {
 
     var body: some View {
         ZStack {
-            CallTones.ink.ignoresSafeArea()
-            RadialGradient(colors: [Color.vastuPrimary.opacity(0.22), .clear], center: .topLeading, startRadius: 0, endRadius: 510)
-                .ignoresSafeArea()
+            AgentScreenBackground()
 
             VStack(spacing: 0) {
-                CallHeader(status: vm.status, isSpeaking: vm.isSpeaking, isVideo: vm.isVideo,
-                           timer: String(format: "%02d:%02d", vm.elapsedSeconds / 60, vm.elapsedSeconds % 60))
+                AgentHeader(
+                    subtitle: "\(vm.status.label) · \(vm.isVideo ? tr("Video", "वीडियो") : tr("Audio", "ऑडियो")) · " +
+                        String(format: "%02d:%02d", vm.elapsedSeconds / 60, vm.elapsedSeconds % 60),
+                    statusDot: { StatusDot(status: vm.status) },
+                    onScanRoom: { vm.startRoomScan() },
+                    isSpeaking: vm.isSpeaking
+                )
 
                 if vm.isVideo {
                     LiveCameraPanel(viewfinder: vm.viewfinder, heading: vm.heading)
@@ -446,7 +530,7 @@ struct AgentInCallView: View {
 
             if let photo = vm.photoToReview {
                 CaptureReviewSheet(
-                    frames: [photo.image], exifHeading: photo.exifHeading, isVideo: false, agentName: AnanyaAgent.firstName,
+                    frames: [photo.image], exifHeading: photo.exifHeading, isVideo: false, agentName: AnanyaAgent.name,
                     onRetake: { vm.photoToReview = nil; vm.openMedia(.camera) }, onDismiss: { vm.photoToReview = nil },
                     onSend: { vm.sendPhoto(question: $0, facing: $1) }
                 )
@@ -455,11 +539,18 @@ struct AgentInCallView: View {
 
             if let video = vm.videoToReview {
                 CaptureReviewSheet(
-                    frames: video.frames, exifHeading: nil, isVideo: true, agentName: AnanyaAgent.firstName, // videos carry no compass heading
+                    frames: video.frames, exifHeading: nil, isVideo: true, agentName: AnanyaAgent.name, // videos carry no compass heading
                     onRetake: { vm.discardVideo(retake: true) }, onDismiss: { vm.discardVideo(retake: false) },
                     onSend: { vm.sendVideo(question: $0, facing: $1) }
                 )
                 .transition(.opacity)
+            }
+
+            if let scan = vm.roomScan {
+                RoomScanView(onClose: { vm.roomScan = nil },
+                             onAskAgent: { vm.roomScan = nil; vm.selectPage(.chat) },
+                             vm: scan)
+                    .transition(.opacity)
             }
         }
         .toast($vm.toast)
@@ -482,43 +573,12 @@ private struct LiveCameraPanel: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(alignment: .topLeading) {
                 Text(heading.degrees.map { tr("Camera facing ", "कैमरा की दिशा: ") + CompassDirection.of(degrees: $0).localName }
-                     ?? tr("\(AnanyaAgent.firstName) sees your camera", "\(AnanyaAgent.firstName) आपका कैमरा देख रही हैं"))
+                     ?? tr("\(AnanyaAgent.name) sees your camera", "\(AnanyaAgent.name) आपका कैमरा देख रही हैं"))
                     .font(.vt(12, .semibold)).foregroundColor(.white)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.55)))
                     .padding(10)
             }
-    }
-}
-
-/// Ananya, what she's doing and the call time on one line, and the reply-language switch.
-private struct CallHeader: View {
-    let status: AgentCallStatus
-    let isSpeaking: Bool
-    let isVideo: Bool
-    let timer: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            AvatarImage(seed: AnanyaAgent.avatarSeed, placeholder: CallTones.surfaceRaised)
-                .frame(width: 38, height: 38)
-                .clipShape(Circle())
-                .padding(4)
-                .overlay(Circle().stroke(isSpeaking ? Color.vastuPrimary : .clear, lineWidth: 2))
-                .animation(.easeInOut(duration: 0.25), value: isSpeaking)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(AnanyaAgent.name).font(.vt(16, .semibold)).foregroundColor(CallTones.textPrimary).lineLimit(1)
-                HStack(spacing: 6) {
-                    StatusDot(status: status)
-                    Text("\(status.label) · \(isVideo ? tr("Video", "वीडियो") : tr("Audio", "ऑडियो")) · \(timer)")
-                        .font(.vt(12)).foregroundColor(CallTones.textMuted).lineLimit(1)
-                }
-            }
-            Spacer(minLength: 8)
-            LanguageSwitch()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
     }
 }
 
@@ -592,7 +652,7 @@ private struct BoardPage: View {
             ZStack {
                 if let line = latest {
                     VStack(spacing: 4) {
-                        Text(line.sender == .agent ? AnanyaAgent.firstName.uppercased() : "YOU")
+                        Text(line.sender == .agent ? AnanyaAgent.name.uppercased() : "YOU")
                             .font(.vt(10)).kerning(1.5)
                             .foregroundColor(line.sender == .agent ? .vastuSaffron : CallTones.textMuted)
                         Text(line.text).font(.vt(14)).foregroundColor(CallTones.textPrimary)

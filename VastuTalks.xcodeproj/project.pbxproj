@@ -3,35 +3,29 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		FF15934D79EE243CF4227565 /* PostViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038A81649776602882E4D03A /* PostViews.swift */; };
-		08A961F14148A7BBA920610A /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */; };
-		B68B36026E22C1C609224387 /* RoomScanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */; };
-		B6D44ABBC789E93CFC4259C7 /* AgentChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D684792F228D759CE7582BA9 /* AgentChatView.swift */; };
-		83B339E3C4395539F30DBFC1 /* CameraViewfinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3272A4901ED1AA22430032F /* CameraViewfinder.swift */; };
-		6682895ACF4A2F3E337C3590 /* AgentChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B370860501F0F00C88E4401 /* AgentChatStore.swift */; };
-		2AF10114402105C3BBB905C9 /* RoomAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */; };
-		50E3F4C79BF80FDFC5240D05 /* ImageMarkup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */; };
-		D3FB2808C847BC11CD34EC0D /* AgentLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */; };
-		9C6DE35B9BFA288C840B3CCE /* SocialRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */; };
-		18FB81F4829610170EF4999D /* Social.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714C7C7C77FF8C57023E56F9 /* Social.swift */; };
 		006871FE484F215481FA6A09 /* CommonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD684531D1557E055D54C61 /* CommonViews.swift */; };
 		05D6B32DCEA319B258508ECE /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */; };
+		08A961F14148A7BBA920610A /* ChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */; };
 		0C20F2D39FBFC57E79E86695 /* AgoraCallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */; };
 		0D0D845CB9FCBB866B8E1401 /* Whiteboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 585D720C6EE2719FE4ABF1FA /* Whiteboard.swift */; };
+		18FB81F4829610170EF4999D /* Social.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714C7C7C77FF8C57023E56F9 /* Social.swift */; };
 		22E83046280D5474C654451A /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35D6AA14550CB2EB7FB76BE2 /* FirebaseMessaging */; };
 		22FC3781414A18BC1293628A /* PhotoFacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */; };
 		260F1C2F8D7E6CE45A2506A5 /* VastuAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8352EDAEA7B4DD616A208582 /* VastuAgent.swift */; };
+		2AF10114402105C3BBB905C9 /* RoomAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */; };
 		2C2F78B1C4F55C569B94DB8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0684FFCC517C615912DFA1E /* Theme.swift */; };
 		2E4317715C7336789E9D7247 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E2F300FC3737AF43684AAE24 /* FirebaseAuth */; };
 		451B6E23F691211C8B16B220 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 17E0458B31D7328EF41605C6 /* FirebaseFirestore */; };
 		4D1ECAC1F28AB4308DF35343 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3370906C1D784B64C5126110 /* HomeView.swift */; };
 		4D6E27AB72114247B11526F5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7632E2C0B345DDBA7FF518C /* Assets.xcassets */; };
 		4DB6B5C7532406227E5A6562 /* SplashOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1BB51A90F738B8E39FD173 /* SplashOnboardingView.swift */; };
+		50E3F4C79BF80FDFC5240D05 /* ImageMarkup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */; };
 		65873AD2DCB254CD042347FA /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68FA9A1F11E69293803DD17F /* AppRouter.swift */; };
+		6682895ACF4A2F3E337C3590 /* AgentChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B370860501F0F00C88E4401 /* AgentChatStore.swift */; };
 		67B3A4B6F8C588402D3D6F4A /* AgentCallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8919A1C92378F4F2EC6CF228 /* AgentCallViews.swift */; };
 		67BA1D2B58516017A91F9EE3 /* CallerListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5742BB9CB40CA3D370EC8A4 /* CallerListener.swift */; };
 		7A8C830E2C0E02481AAE7C10 /* AgentVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DBC13ED748C34AE03B7B522 /* AgentVoice.swift */; };
@@ -39,34 +33,32 @@
 		7D89C7DC40F34CCB707CC307 /* AgentChatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F75B2A212AA1777DCD7F7D1 /* AgentChatPage.swift */; };
 		802E1D05EF5970511325745E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D214035060E4D5EBF0BDCC2 /* Models.swift */; };
 		8253A826E9A2169A288B55AF /* MediaCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D727B6D2CA8994CE94297324 /* MediaCapture.swift */; };
+		83B339E3C4395539F30DBFC1 /* CameraViewfinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3272A4901ED1AA22430032F /* CameraViewfinder.swift */; };
 		868CD2631A7E81414D3A0D20 /* nanopb in Frameworks */ = {isa = PBXBuildFile; productRef = 8A3C815D67F59E20334AA770 /* nanopb */; };
 		89E5209CE3403BA4A87A3E35 /* CameraHeading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61460EDA5C03FE95FB40C9FB /* CameraHeading.swift */; };
+		9C6DE35B9BFA288C840B3CCE /* SocialRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */; };
 		B0BE5E586C17481F71DF94F1 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = EC6F1C766B5AA72E163E73DE /* FirebaseFunctions */; };
 		B1A771A9C82D057BFE691029 /* AgentCallRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68876E883725F7B396041A57 /* AgentCallRecorder.swift */; };
+		B68B36026E22C1C609224387 /* RoomScanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */; };
+		B6D44ABBC789E93CFC4259C7 /* AgentChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D684792F228D759CE7582BA9 /* AgentChatView.swift */; };
 		B8179FA57145FEC1BA2AD69D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE24A4F3307CC769DFBADA2B /* RootView.swift */; };
 		BC92AC5DC35313DB0EDD1A98 /* LiveCallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19A34620560162EE1E243592 /* LiveCallViews.swift */; };
 		CB35BDFE8D341A7EBF6E1972 /* ProfileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991B87439E997E7A5975944D /* ProfileViews.swift */; };
+		D3FB2808C847BC11CD34EC0D /* AgentLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */; };
 		EA1B5DD06E61EC1B6CE57424 /* VastuTalksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EEA2B1C8F5DEEAD7E6EFDB /* VastuTalksApp.swift */; };
 		F1D1CF673C29DA44A31D85E2 /* RtcBasic in Frameworks */ = {isa = PBXBuildFile; productRef = 50EC5E8C34A45A90EE0656E0 /* RtcBasic */; };
 		FA83C786404D8F2A7C3925FC /* VastuIllustrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */; };
+		FF15934D79EE243CF4227565 /* PostViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038A81649776602882E4D03A /* PostViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		038A81649776602882E4D03A /* PostViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostViews.swift; sourceTree = "<group>"; };
-		9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViews.swift; sourceTree = "<group>"; };
-		E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanViews.swift; sourceTree = "<group>"; };
-		D684792F228D759CE7582BA9 /* AgentChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatView.swift; sourceTree = "<group>"; };
-		E3272A4901ED1AA22430032F /* CameraViewfinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraViewfinder.swift; sourceTree = "<group>"; };
-		9B370860501F0F00C88E4401 /* AgentChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatStore.swift; sourceTree = "<group>"; };
-		6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAnalysis.swift; sourceTree = "<group>"; };
-		A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMarkup.swift; sourceTree = "<group>"; };
-		20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLanguage.swift; sourceTree = "<group>"; };
-		2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialRepositories.swift; sourceTree = "<group>"; };
-		714C7C7C77FF8C57023E56F9 /* Social.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Social.swift; sourceTree = "<group>"; };
 		0A50E95B3F1EA4F2E4626198 /* AgoraCallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgoraCallManager.swift; sourceTree = "<group>"; };
 		19A34620560162EE1E243592 /* LiveCallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCallViews.swift; sourceTree = "<group>"; };
 		1AD684531D1557E055D54C61 /* CommonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonViews.swift; sourceTree = "<group>"; };
-		2F2D5751D39154436556FB16 /* VastuTalks.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VastuTalks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		20E5F5BE236F68306EF63E2C /* AgentLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLanguage.swift; sourceTree = "<group>"; };
+		2108D2CCEA02C3DDEA6A4329 /* SocialRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialRepositories.swift; sourceTree = "<group>"; };
+		2F2D5751D39154436556FB16 /* VastuTalks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VastuTalks.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3370906C1D784B64C5126110 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		4DBC13ED748C34AE03B7B522 /* AgentVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentVoice.swift; sourceTree = "<group>"; };
 		585D720C6EE2719FE4ABF1FA /* Whiteboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Whiteboard.swift; sourceTree = "<group>"; };
@@ -74,19 +66,27 @@
 		62872BDB25C7E1A4A0308FB3 /* VastuIllustrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuIllustrations.swift; sourceTree = "<group>"; };
 		68876E883725F7B396041A57 /* AgentCallRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCallRecorder.swift; sourceTree = "<group>"; };
 		68FA9A1F11E69293803DD17F /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		6F9A9472AAA29DAD8221552C /* RoomAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAnalysis.swift; sourceTree = "<group>"; };
+		714C7C7C77FF8C57023E56F9 /* Social.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Social.swift; sourceTree = "<group>"; };
 		7A0980FB73289E6C2CB1174E /* PhotoFacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFacing.swift; sourceTree = "<group>"; };
 		8352EDAEA7B4DD616A208582 /* VastuAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuAgent.swift; sourceTree = "<group>"; };
 		844D1555DE45B82B9BE58136 /* Repositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Repositories.swift; sourceTree = "<group>"; };
 		8919A1C92378F4F2EC6CF228 /* AgentCallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCallViews.swift; sourceTree = "<group>"; };
 		991B87439E997E7A5975944D /* ProfileViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViews.swift; sourceTree = "<group>"; };
+		9B370860501F0F00C88E4401 /* AgentChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatStore.swift; sourceTree = "<group>"; };
 		9D214035060E4D5EBF0BDCC2 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		9F75B2A212AA1777DCD7F7D1 /* AgentChatPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatPage.swift; sourceTree = "<group>"; };
+		9FC8F409EB29E7B9BDCFF106 /* ChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViews.swift; sourceTree = "<group>"; };
+		A6F3E96A490FE037F0DCB473 /* ImageMarkup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMarkup.swift; sourceTree = "<group>"; };
 		C0EEA2B1C8F5DEEAD7E6EFDB /* VastuTalksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VastuTalksApp.swift; sourceTree = "<group>"; };
 		C7632E2C0B345DDBA7FF518C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C9EE9504F1BBD8D7F3C5CD52 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		D5742BB9CB40CA3D370EC8A4 /* CallerListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallerListener.swift; sourceTree = "<group>"; };
+		D684792F228D759CE7582BA9 /* AgentChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatView.swift; sourceTree = "<group>"; };
 		D727B6D2CA8994CE94297324 /* MediaCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCapture.swift; sourceTree = "<group>"; };
 		DF1BB51A90F738B8E39FD173 /* SplashOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashOnboardingView.swift; sourceTree = "<group>"; };
+		E1815E9EE27F2D59B1E730C2 /* RoomScanViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanViews.swift; sourceTree = "<group>"; };
+		E3272A4901ED1AA22430032F /* CameraViewfinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraViewfinder.swift; sourceTree = "<group>"; };
 		EE24A4F3307CC769DFBADA2B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		F0684FFCC517C615912DFA1E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		FC32EEAB0B0451AD511242B7 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
@@ -546,6 +546,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CXD7Q947LG;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Config/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -553,8 +554,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = "$(inherited) -ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.vastutalks.app;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vastucompany.vastutalks;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -569,6 +573,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CXD7Q947LG;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Config/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -576,8 +581,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = "$(inherited) -ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.vastutalks.app;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vastucompany.vastutalks;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;

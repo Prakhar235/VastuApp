@@ -1,14 +1,19 @@
+import Combine
+import FirebaseAuth
 import UIKit
 
 /// Keeps the text chat with Ananya on the phone, so it's still there next
 /// time and she picks up where she left off. Saves three things in the
-/// app's private storage (Application Support/agent_chat/):
+/// app's private storage (Application Support/agent_chat/<uid>/):
 ///  - the chat as shown: every message, its images as JPEGs;
 ///  - the conversation as the model sees it (VastuAgent.exportHistory),
 ///    which includes her marks, so follow-up questions have the context;
 ///  - the last photo or video frames she can still mark up.
 ///
-/// Writes happen in order on one background queue.
+/// The call with her saves into the same chat, so what was said on a
+/// call is there in the chat afterwards (and the other way round).
+///
+/// Writes from every instance happen in order on one background queue.
 final class AgentChatStore {
     struct Saved {
         let messages: [AgentChatMessage]
@@ -18,11 +23,17 @@ final class AgentChatStore {
 
     private let dir: URL
     private let chatFile: URL
-    private let io = DispatchQueue(label: "AgentChatStore")
+    private var io: DispatchQueue { Self.io }
+
+    private static let io = DispatchQueue(label: "AgentChatStore")
+    /// Sends (on the main queue) once each save from a call is on disk.
+    static let callSaves = PassthroughSubject<Void, Never>()
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        dir = support.appendingPathComponent("agent_chat", isDirectory: true)
+        // One chat per account, so signing in with another account on this phone doesn't show the last one's.
+        let uid = Auth.auth().currentUser?.uid ?? "signed_out"
+        dir = support.appendingPathComponent("agent_chat", isDirectory: true).appendingPathComponent(uid, isDirectory: true)
         chatFile = dir.appendingPathComponent("chat.json")
     }
 
@@ -49,8 +60,9 @@ final class AgentChatStore {
         }
     }
 
-    /// Saves the chat and the model's history. Images already on disk aren't written again.
-    func save(messages: [AgentChatMessage], history: String, markableCount: Int) {
+    /// Saves the chat and the model's history. Images already on disk aren't
+    /// written again. `fromCall` tells an open chat screen to reload it.
+    func save(messages: [AgentChatMessage], history: String, markableCount: Int, fromCall: Bool = false) {
         io.async { [dir, chatFile] in
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let list: [[String: Any]] = messages.map { m in
@@ -70,6 +82,7 @@ final class AgentChatStore {
             if let data = try? JSONSerialization.data(withJSONObject: json) {
                 try? data.write(to: chatFile, options: .atomic)
             }
+            if fromCall { DispatchQueue.main.async { Self.callSaves.send() } }
         }
     }
 

@@ -1,5 +1,7 @@
 import FirebaseAuth
+import FirebaseMessaging
 import SwiftUI
+import UserNotifications
 
 enum RootScreen {
     case splash, onboarding, signIn, home
@@ -98,6 +100,13 @@ final class AppRouter: ObservableObject {
         Task { @MainActor in
             // Experts show as offline straight away (fails harmlessly for normal users).
             try? await UserRepository().heartbeat(present: false)
+            // Stop this account's pushes reaching the phone once it's signed out.
+            await UserRepository().clearFcmToken()
+            try? await Messaging.messaging().deleteToken()
+            PushTokens.forget()
+            let center = UNUserNotificationCenter.current()
+            center.removeAllDeliveredNotifications()
+            center.removeAllPendingNotificationRequests()
             AuthRepository().signOut()
             setRoot(.signIn)
         }

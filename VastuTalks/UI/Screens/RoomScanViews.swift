@@ -129,10 +129,16 @@ final class RoomScanViewModel: ObservableObject {
         stage = .capture
     }
 
+    /// Where a finished scan goes instead of the chat, e.g. into a call with Ananya.
+    var onHandOff: ((RoomScanHandoff.Scan) -> Void)?
+
     /// Sends the scan to the chat with Ananya (once); false if there's nothing to send.
     func handOffToChat() -> Bool {
         guard let result = analysis else { return false }
-        if !sentToChat { RoomScanHandoff.shared.send(RoomScanHandoff.Scan(walls: walls, analysis: result)) }
+        if !sentToChat {
+            let scan = RoomScanHandoff.Scan(walls: walls, analysis: result)
+            if let onHandOff = onHandOff { onHandOff(scan) } else { RoomScanHandoff.shared.send(scan) }
+        }
         sentToChat = true
         return true
     }
@@ -443,7 +449,7 @@ private struct AnalyzingStage: View {
                 .padding(.top, 20)
             } else {
                 ProgressView().tint(.vastuPrimary).scaleEffect(1.4).padding(.top, 28)
-                Text(tr("\(AnanyaAgent.firstName) is reading your room…", "\(AnanyaAgent.firstName) आपके कमरे को देख रही हैं…"))
+                Text(tr("\(AnanyaAgent.name) is reading your room…", "\(AnanyaAgent.name) आपके कमरे को देख रही हैं…"))
                     .font(.vt(16, .semibold)).foregroundColor(CallTones.textPrimary).padding(.top, 16)
                 Text(tr("Finding each object, its direction, and what to fix", "हर चीज़, उसकी दिशा और क्या ठीक करना है — देखा जा रहा है"))
                     .font(.vt(13, .medium)).foregroundColor(CallTones.textMuted).multilineTextAlignment(.center).padding(.top, 4)
@@ -524,7 +530,7 @@ private struct RoomResultView: View {
                                 "दिशा फ़ोन के कम्पास से ली गई है (सटीकता लगभग ±10°)। गलत लगे तो फ़ोन को धातु और इलेक्ट्रॉनिक्स से दूर रखकर फिर से स्कैन करें।"))
                             .font(.vt(12, .medium)).foregroundColor(Color(hex: 0x8D87A6)).lineSpacing(4)
 
-                        PillButton(label: tr("Ask \(AnanyaAgent.firstName) about this room", "\(AnanyaAgent.firstName) से इस कमरे के बारे में पूछें"),
+                        PillButton(label: tr("Ask \(AnanyaAgent.name) about this room", "\(AnanyaAgent.name) से इस कमरे के बारे में पूछें"),
                                    outlined: true, fullWidth: true, action: onAskAgent)
                         PillButton(label: tr("Scan again", "फिर से स्कैन करें"), fullWidth: true) { vm.rescan() }
                     }

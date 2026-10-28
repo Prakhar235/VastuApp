@@ -23,7 +23,6 @@ final class AuthViewModel: ObservableObject {
             do {
                 _ = try await authRepository.signIn(email: email, password: password)
                 isLoading = false
-                await PushToken.saveBestEffort()
                 onSuccess()
             } catch {
                 isLoading = false
@@ -56,8 +55,24 @@ final class AuthViewModel: ObservableObject {
                 errorMessage = "Account created, but saving your profile failed: \(error.localizedDescription)"
             }
             isLoading = false
-            await PushToken.saveBestEffort()
             onSuccess()
+        }
+    }
+
+    /// Sends a reset link to `email`; `onResult` gets the message to show.
+    func sendPasswordReset(email: String, onResult: @escaping (String) -> Void) {
+        let trimmed = email.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            onResult("Enter your email above, then tap Forgot password.")
+            return
+        }
+        Task {
+            do {
+                try await authRepository.sendPasswordReset(email: trimmed)
+                onResult("Password reset link sent to \(trimmed).")
+            } catch {
+                onResult(error.localizedDescription.isEmpty ? "Couldn't send the reset link." : error.localizedDescription)
+            }
         }
     }
 }
@@ -72,6 +87,7 @@ struct SignInView: View {
     @State private var mode = SignInMode.password
     @State private var email = ""
     @State private var password = ""
+    @State private var toast: String?
 
     var body: some View {
         ZStack {
@@ -114,7 +130,10 @@ struct SignInView: View {
                             VastuTextField(text: $password, placeholder: "Enter password", icon: "lock.fill",
                                            isPassword: true, contentType: .password)
                             Spacer().frame(height: 14)
-                            Button { /* Forgot password isn't wired yet — same as Android. */ } label: {
+                            Button {
+                                hideKeyboard()
+                                viewModel.sendPasswordReset(email: email) { toast = $0 }
+                            } label: {
                                 Text("Forgot Password?").font(.vt(14)).foregroundColor(.vastuPrimary)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
@@ -152,6 +171,7 @@ struct SignInView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .toast($toast)
     }
 }
 

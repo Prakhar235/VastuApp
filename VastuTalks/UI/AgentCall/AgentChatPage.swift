@@ -281,3 +281,102 @@ struct BubbleShape: Shape {
         return p
     }
 }
+
+/// The dark backdrop with a violet glow shared by the agent chat and call.
+struct AgentScreenBackground: View {
+    var body: some View {
+        ZStack {
+            CallTones.ink
+            RadialGradient(colors: [Color.vastuPrimary.opacity(0.22), .clear], center: .topLeading, startRadius: 0, endRadius: 510)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// The top of both agent screens (chat and call), so they look the same:
+/// Ananya with a status line and `actions` on the first row, then "Scan a
+/// room" and the reply-language switch on the second.
+struct AgentHeader<StatusDot: View, Actions: View>: View {
+    let subtitle: String
+    @ViewBuilder let statusDot: () -> StatusDot
+    let onScanRoom: () -> Void
+    var isSpeaking = false
+    var onBack: (() -> Void)?
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 0) {
+                if let onBack = onBack {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(CallTones.textPrimary).frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(tr("Back", "वापस"))
+                } else {
+                    Spacer().frame(width: 12, height: 44)
+                }
+                AvatarImage(seed: AnanyaAgent.avatarSeed, placeholder: CallTones.surfaceRaised)
+                    .frame(width: 38, height: 38)
+                    .clipShape(Circle())
+                    .padding(4)
+                    .overlay(Circle().stroke(isSpeaking ? Color.vastuPrimary : .clear, lineWidth: 2))
+                    .animation(.easeInOut(duration: 0.25), value: isSpeaking)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AnanyaAgent.name).font(.vt(16, .semibold)).foregroundColor(CallTones.textPrimary).lineLimit(1)
+                    HStack(spacing: 6) {
+                        statusDot()
+                        Text(subtitle).font(.vt(12, .medium)).foregroundColor(CallTones.textMuted).lineLimit(1)
+                    }
+                }
+                .padding(.leading, 10)
+                .padding(.trailing, 4)
+                Spacer(minLength: 4)
+                actions()
+            }
+            HStack(spacing: 0) {
+                Button(action: onScanRoom) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "safari").font(.system(size: 16)).foregroundColor(.vastuPrimary)
+                        Text(tr("Scan a room", "कमरा स्कैन करें")).font(.vt(13, .semibold)).foregroundColor(CallTones.textPrimary)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 38)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(CallTones.surface))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(CallTones.hairline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                LanguageSwitch()
+            }
+            .padding(.leading, 12)
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 12)
+        .padding(.vertical, 8)
+    }
+}
+
+extension AgentHeader where Actions == EmptyView {
+    init(subtitle: String, @ViewBuilder statusDot: @escaping () -> StatusDot, onScanRoom: @escaping () -> Void,
+         isSpeaking: Bool = false, onBack: (() -> Void)? = nil) {
+        self.init(subtitle: subtitle, statusDot: statusDot, onScanRoom: onScanRoom, isSpeaking: isSpeaking,
+                  onBack: onBack, actions: { EmptyView() })
+    }
+}
+
+/// A round icon button for AgentHeader's actions.
+struct AgentHeaderButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Circle().fill(CallTones.surfaceRaised).frame(width: 40, height: 40)
+                .overlay(Image(systemName: icon).font(.system(size: 17)).foregroundColor(CallTones.textPrimary))
+        }
+        .padding(.horizontal, 2)
+        .accessibilityLabel(label)
+    }
+}

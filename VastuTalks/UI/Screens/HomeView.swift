@@ -477,16 +477,56 @@ private enum HomeTab { case experts, posts }
 private struct NormalUserHome: View {
     @ObservedObject var viewModel: HomeViewModel
     @State private var tab = HomeTab.experts
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+
+    private var terms: [String] {
+        query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    private func matches(_ haystack: String) -> Bool {
+        let text = haystack.lowercased()
+        return terms.allSatisfy { text.contains($0) }
+    }
 
     var body: some View {
+        let experts = viewModel.experts.sortedForDirectory(now: viewModel.nowMillis)
+        let shownExperts = terms.isEmpty ? experts : experts.filter { matches("\($0.name) \($0.specialty) \($0.city) \($0.bio)") }
+        let shownPosts = terms.isEmpty ? viewModel.posts : viewModel.posts.filter { matches("\($0.text) \($0.authorName) \($0.authorSpecialty)") }
         VStack(spacing: 0) {
-            // Search bar (no search screen yet — same as Android)
+            // Ananya, the AI Vastu agent — always available, no human
+            // expert needs to be online. Chat or call her (the call can
+            // switch between audio and video); both offer the room scan.
+            AnanyaCard()
+                .padding(.horizontal, 20)
+
+            Spacer().frame(height: 12)
+
+            // Search: narrows the open tab — experts by name, specialty or
+            // city; posts by their text or author.
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").font(.system(size: 17)).foregroundColor(.textSecondary)
-                Text("Search by name or specialty").font(.vt(14)).foregroundColor(.textSecondary)
-                Spacer()
+                TextField(tab == .experts ? "Search by name, specialty or city" : "Search posts", text: $query)
+                    .font(.vt(14, .regular))
+                    .foregroundColor(.vastuCharcoal)
+                    .tint(.vastuPrimary)
+                    .submitLabel(.search)
+                    .autocorrectionDisabled()
+                    .focused($searchFocused)
+                    .onSubmit { searchFocused = false }
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        searchFocused = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 17)).foregroundColor(.textSecondary)
+                            .frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel("Clear search")
+                }
             }
-            .padding(.horizontal, 16)
+            .padding(.leading, 16)
+            .padding(.trailing, 6)
             .frame(height: 48)
             .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
             .padding(.horizontal, 20)
@@ -504,10 +544,10 @@ private struct NormalUserHome: View {
 
             switch tab {
             case .experts:
-                ExpertsTab(experts: viewModel.experts.sortedForDirectory(now: viewModel.nowMillis),
-                           now: viewModel.nowMillis, expertsError: viewModel.expertsError)
+                ExpertsTab(experts: shownExperts, now: viewModel.nowMillis, expertsError: viewModel.expertsError,
+                           searching: !terms.isEmpty)
             case .posts:
-                PostsFeed(viewModel: viewModel)
+                PostsFeed(viewModel: viewModel, posts: shownPosts)
             }
         }
     }
@@ -517,6 +557,7 @@ private struct ExpertsTab: View {
     let experts: [ExpertProfile]
     let now: Int64
     let expertsError: String?
+    var searching = false
 
     var body: some View {
         ScrollView {
@@ -536,13 +577,6 @@ private struct ExpertsTab: View {
                 .background(RoundedRectangle(cornerRadius: 20).fill(Gradients.primaryHorizontal))
                 .padding(.horizontal, 20)
 
-                Spacer().frame(height: 12)
-
-                // Ananya, the AI Vastu agent — always available, no human expert needs
-                // to be online. Chat or call her; the room scan lives in her chat.
-                AnanyaCard()
-                    .padding(.horizontal, 20)
-
                 Spacer().frame(height: 20)
 
                 LazyVStack(spacing: 14) {
@@ -550,7 +584,8 @@ private struct ExpertsTab: View {
                         Text("Couldn't load experts: \(error)").font(.vt(13)).foregroundColor(.danger)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
                     } else if experts.isEmpty {
-                        Text("No experts have joined yet — check back soon.").font(.vt(13)).foregroundColor(.textSecondary)
+                        Text(searching ? "No experts match your search." : "No experts have joined yet — check back soon.")
+                            .font(.vt(13)).foregroundColor(.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
                     } else {
                         ForEach(experts) { expert in
@@ -575,7 +610,7 @@ private struct AnanyaCard: View {
                     .frame(width: 36, height: 36)
                     .overlay(Image(systemName: "sparkles").font(.system(size: 16)).foregroundColor(.vastuPrimary))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Ananya — AI Vastu expert").font(.vt(14)).foregroundColor(.vastuCharcoal)
+                    Text("Ask Vastu Expert").font(.vt(14)).foregroundColor(.vastuCharcoal)
                     Text("Available anytime · English or Hindi · share room photos").font(.vt(11)).foregroundColor(.textSecondary)
                 }
                 Spacer()
@@ -661,20 +696,22 @@ private struct LiveExpertCard: View {
     }
 }
 
-/// Every expert's posts, newest first; tapping an author opens their profile.
+/// Every expert's posts (or those matching the search), newest first; tapping an author opens their profile.
 private struct PostsFeed: View {
     @ObservedObject var viewModel: HomeViewModel
+    let posts: [Post]
 
     var body: some View {
-        if viewModel.posts.isEmpty {
+        if posts.isEmpty {
             Spacer()
-            Text("No posts yet. Tips and updates from Vastu experts will show up here.")
+            Text(viewModel.posts.isEmpty ? "No posts yet. Tips and updates from Vastu experts will show up here."
+                                         : "No posts match your search.")
                 .font(.vt(14, .medium)).foregroundColor(.textSecondary).multilineTextAlignment(.center).padding(32)
             Spacer()
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(viewModel.posts) { post in
+                    ForEach(posts) { post in
                         PostCard(post: post, liked: viewModel.likedPostIds.contains(post.id),
                                  onLike: { viewModel.toggleLike(post.id) },
                                  onOpen: { AppRouter.shared.push(.postDetail(postId: post.id)) },

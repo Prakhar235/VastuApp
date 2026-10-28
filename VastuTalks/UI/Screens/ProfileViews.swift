@@ -11,8 +11,12 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var profile: UserProfile?
     /// A photo just picked, shown while it saves.
     @Published private(set) var pendingPhoto: UIImage?
+    /// For the badge on Notifications.
+    @Published private(set) var unreadNotifications = 0
+    @Published private(set) var savingDetails = false
 
     private var registration: ListenerRegistration?
+    private var notificationsRegistration: ListenerRegistration?
 
     /// The Firebase "credential data" the profile shows — name and email.
     var currentUser: FirebaseAuth.User? { Auth.auth().currentUser }
@@ -24,9 +28,31 @@ final class ProfileViewModel: ObservableObject {
                 Task { @MainActor in self?.profile = profile }
             }
         }
+        if notificationsRegistration == nil {
+            notificationsRegistration = NotificationRepository().listen { [weak self] list in
+                Task { @MainActor in self?.unreadNotifications = list.filter { !$0.read }.count }
+            }
+        }
     }
 
-    deinit { registration?.remove() }
+    deinit {
+        registration?.remove()
+        notificationsRegistration?.remove()
+    }
+
+    /// Saves a new name and phone; returns an error message, or nil when saved.
+    func updateDetails(name: String, phone: String) async -> String? {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return "Enter your name." }
+        savingDetails = true
+        defer { savingDetails = false }
+        do {
+            try await UserRepository().updateNameAndPhone(name: name, phone: phone.trimmingCharacters(in: .whitespaces))
+            return nil
+        } catch {
+            return "Couldn't save: \(error.localizedDescription)"
+        }
+    }
 
     func loadHistory() {
         isLoading = true
@@ -60,13 +86,18 @@ private enum ProfileTab { case profile, history }
 struct ProfileView: View {
     let onBack: () -> Void
     let onSignOut: () -> Void
+    var onOpenNotifications: () -> Void = {}
 
     @StateObject private var viewModel = ProfileViewModel()
     @State private var tab = ProfileTab.profile
+    @State private var editingDetails = false
+    @State private var showSettings = false
+    @State private var toast: String?
 
     var body: some View {
         let user = viewModel.currentUser
-        let displayName = (user?.displayName).flatMap { $0.isEmpty ? nil : $0 } ?? "Vastu Talks user"
+        let displayName = (viewModel.profile?.name).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (user?.displayName).flatMap { $0.isEmpty ? nil : $0 } ?? "Vastu Talks user"
         let email = user?.email ?? "No email on file"
 
         VStack(spacing: 0) {
@@ -106,17 +137,24 @@ struct ProfileView: View {
                     if tab == .profile {
                         sectionHeader("ACCOUNT")
                         settingsGroup {
-                            SettingsRow(icon: "person.fill", label: "Edit Profile")
+                            SettingsRow(icon: "person.fill", label: "Edit Profile") { editingDetails = true }
                             divider
-                            SettingsRow(icon: "bell.fill", label: "Notifications", badgeCount: 3)
+                            SettingsRow(icon: "bell.fill", label: "Notifications",
+                                        badgeCount: viewModel.unreadNotifications > 0 ? viewModel.unreadNotifications : nil,
+                                        action: onOpenNotifications)
                             divider
-                            SettingsRow(icon: "gearshape.fill", label: "Settings")
+                            SettingsRow(icon: "gearshape.fill", label: "Settings") { showSettings = true }
                         }
-                        sectionHeader("PAYMENT & BILLING")
+                        sectionHeader(CallPricing.paidCalls ? "PAYMENT & BILLING" : "ACTIVITY")
                         settingsGroup {
-                            SettingsRow(icon: "creditcard.fill", label: "Payment Methods")
-                            divider
-                            SettingsRow(icon: "clock.arrow.circlepath", label: "Transaction History")
+                            if CallPricing.paidCalls {
+                                SettingsRow(icon: "creditcard.fill", label: "Payment Methods") {
+                                    toast = "Payments aren't set up yet — calls are free for now."
+                                }
+                                divider
+                            }
+                            SettingsRow(icon: "clock.arrow.circlepath",
+                                        label: CallPricing.paidCalls ? "Transaction History" : "Call History") { tab = .history }
                         }
                         Button(action: onSignOut) {
                             HStack(spacing: 14) {
@@ -153,6 +191,13 @@ struct ProfileView: View {
         }
         .background(Color.surfaceLight.ignoresSafeArea())
         .onAppear { viewModel.start() }
+        .toast($toast)
+        .sheet(isPresented: $editingDetails) {
+            EditDetailsSheet(name: displayName, phone: viewModel.profile?.phone ?? "", viewModel: viewModel) { toast = "Profile saved" }
+        }
+        .sheet(isPresented: $showSettings) {
+            ProfileSettingsSheet { toast = $0 }
+        }
     }
 
     private var divider: some View { Rectangle().fill(Color.surfaceLight).frame(height: 1) }
@@ -202,9 +247,13 @@ private struct SettingsRow: View {
     let icon: String
     let label: String
     var badgeCount: Int?
+    let action: () -> Void
 
     var body: some View {
-        // Not wired yet — these all need dedicated screens (same as Android).
+        Button(action: action) { row }.buttonStyle(.plain)
+    }
+
+    private var row: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.vastuPrimary.opacity(0.1))
@@ -222,6 +271,113 @@ private struct SettingsRow: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Name and phone.
+private struct EditDetailsSheet: View {
+    let name: String
+    let phone: String
+    @ObservedObject var viewModel: ProfileViewModel
+    let onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var newName = ""
+    @State private var newPhone = ""
+    @State private var error: String?
+    @State private var loaded = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Name", text: $newName).textContentType(.name)
+                    TextField("Phone", text: $newPhone).keyboardType(.phonePad).textContentType(.telephoneNumber)
+                }
+                if let error = error {
+                    Text(error).font(.vt(13)).foregroundColor(.danger)
+                }
+            }
+            .navigationTitle("Edit profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(viewModel.savingDetails)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(viewModel.savingDetails ? "Saving…" : "Save") {
+                        error = nil
+                        Task {
+                            if let failure = await viewModel.updateDetails(name: newName, phone: newPhone) {
+                                error = failure
+                            } else {
+                                onSaved()
+                                dismiss()
+                            }
+                        }
+                    }
+                    .disabled(viewModel.savingDetails)
+                }
+            }
+        }
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            newName = name
+            newPhone = phone
+        }
+    }
+}
+
+/// The Vastu Expert's reply language, the phone's notification settings, and clearing the AI chat.
+private struct ProfileSettingsSheet: View {
+    let onMessage: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var language = AgentLanguagePref.shared
+    @State private var confirmClear = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("\(AnanyaAgent.name) replies in") {
+                    ForEach([(AgentLanguage.english, "English"), (AgentLanguage.hindi, "हिंदी (Hindi)")], id: \.0) { option, label in
+                        Button { language.set(option) } label: {
+                            HStack {
+                                Text(label).foregroundColor(.vastuCharcoal)
+                                Spacer()
+                                if language.current == option {
+                                    Image(systemName: "checkmark").foregroundColor(.vastuPrimary)
+                                }
+                            }
+                        }
+                    }
+                }
+                Section {
+                    Button("Notification settings") {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    Button("Clear \(AnanyaAgent.name) chat", role: .destructive) { confirmClear = true }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .alert("Clear the chat?", isPresented: $confirmClear) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear", role: .destructive) {
+                    AgentChatStore().clear()
+                    onMessage("Chat cleared")
+                }
+            } message: {
+                Text("Your chat with the \(AnanyaAgent.name), and what she remembers of it, will be deleted from this phone.")
+            }
+        }
     }
 }
 

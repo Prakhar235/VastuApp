@@ -8,6 +8,8 @@ struct ChatsListView: View {
 
     @State private var chats: [Chat]?
     @State private var registration: ListenerRegistration?
+    /// Chats saved without the other person's name: looked up in the expert directory.
+    @State private var lookedUpNames: [String: String] = [:]
     private let repository = ChatRepository()
 
     var body: some View {
@@ -26,8 +28,8 @@ struct ChatsListView: View {
                         LazyVStack(spacing: 8) {
                             ForEach(list) { chat in
                                 let other = chat.otherUid(me: myUid)
-                                let name = chat.names[other].flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
-                                Button { onOpenChat(other, name) } label: {
+                                let name = chat.names[other].flatMap { $0.isEmpty ? nil : $0 } ?? lookedUpNames[other] ?? "…"
+                                Button { onOpenChat(other, name == "…" ? "" : name) } label: {
                                     ChatRow(chat: chat, myUid: myUid, otherUid: other, name: name)
                                 }
                                 .buttonStyle(.plain)
@@ -45,6 +47,19 @@ struct ChatsListView: View {
             guard registration == nil else { return }
             registration = repository.listenMyChats { chats = $0 }
             if registration == nil { chats = [] }
+        }
+        .onChange(of: chats) { list in
+            let missing = Set((list ?? []).map { $0.otherUid(me: myUid) }.filter { uid in
+                lookedUpNames[uid] == nil &&
+                    (list ?? []).contains { $0.otherUid(me: myUid) == uid && ($0.names[uid] ?? "").isEmpty }
+            })
+            for uid in missing {
+                lookedUpNames[uid] = "…" // once per person
+                Task {
+                    let name = (try? await UserRepository().getExpert(uid))??.name ?? ""
+                    lookedUpNames[uid] = name.isEmpty ? "VastuTalks user" : name
+                }
+            }
         }
         .onDisappear {
             registration?.remove()
@@ -88,7 +103,8 @@ private struct ChatRow: View {
 @MainActor
 final class ConversationViewModel: ObservableObject {
     let otherUid: String
-    let otherName: String
+    /// As passed in; filled from their expert entry or the chat when that was blank.
+    @Published private(set) var otherName: String
     let myUid: String
     let chatId: String
 
@@ -110,7 +126,7 @@ final class ConversationViewModel: ObservableObject {
 
     init(otherUid: String, otherName: String) {
         self.otherUid = otherUid
-        self.otherName = otherName.isEmpty ? "Chat" : otherName
+        self.otherName = otherName
         myUid = chats.myUid ?? ""
         chatId = ChatRepository.chatId(myUid, otherUid)
     }
@@ -129,13 +145,22 @@ final class ConversationViewModel: ObservableObject {
         if let r = chats.listenMyChats({ [weak self] list in
             Task { @MainActor in
                 guard let self = self else { return }
-                self.chatPhoto = list.first { $0.id == self.chatId }?.photos[self.otherUid] ?? ""
+                let chat = list.first { $0.id == self.chatId }
+                self.chatPhoto = chat?.photos[self.otherUid] ?? ""
+                if self.otherName.isEmpty || self.otherName == "VastuTalks user",
+                   let saved = chat?.names[self.otherUid], !saved.isEmpty {
+                    self.otherName = saved
+                }
             }
         }) { registrations.append(r) }
         if let r = users.listenMyProfile({ [weak self] profile in
             Task { @MainActor in self?.me = profile }
         }) { registrations.append(r) }
-        Task { otherExpert = try? await users.getExpert(otherUid) }
+        Task {
+            otherExpert = try? await users.getExpert(otherUid)
+            if otherName.isEmpty, let name = otherExpert?.name, !name.isEmpty { otherName = name }
+            if otherName.isEmpty { otherName = "VastuTalks user" }
+        }
     }
 
     func stop() {
@@ -163,7 +188,7 @@ final class ConversationViewModel: ObservableObject {
         Task {
             do {
                 try await chats.send(otherUid: otherUid, me: (profile.name, profile.photo),
-                                     other: (otherName, otherExpert?.photo ?? ""), text: text, image: picture)
+                                     other: (otherName == "VastuTalks user" ? "" : otherName, otherExpert?.photo ?? ""), text: text, image: picture)
                 input = ""
                 image = nil
             } catch {

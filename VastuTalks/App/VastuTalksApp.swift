@@ -1,4 +1,5 @@
 import AudioToolbox
+import FirebaseAuth
 import FirebaseMessaging
 import SwiftUI
 import UserNotifications
@@ -78,6 +79,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNU
         Messaging.messaging().delegate = self
         UNUserNotificationCenter.current().delegate = self
         application.registerForRemoteNotifications()
+        PushTokens.start()
         return true
     }
 
@@ -95,12 +97,27 @@ final class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNU
         Task { try? await UserRepository().saveFcmToken(token) }
     }
 
+    /// False for a push meant for another account that used this phone (or
+    /// when nobody is signed in): it isn't for whoever is here now.
+    private static func isForMe(_ userInfo: [AnyHashable: Any]) -> Bool {
+        guard let me = Auth.auth().currentUser?.uid else { return false }
+        if let toUid = userInfo["toUid"] as? String, toUid != me { return false }
+        // A chat id is its two uids: not one of ours, so it's for an account that used this phone before.
+        if userInfo["type"] as? String == "chat", let chatId = userInfo["chatId"] as? String,
+           !chatId.split(separator: "_").contains(Substring(me)) { return false }
+        return true
+    }
+
     /// Pushes that arrive while the app is open: shown as a banner, except an
-    /// incoming call the expert's Home is already showing, and a message in
-    /// the chat that's open on screen.
+    /// incoming call the expert's Home is already showing, a message in the
+    /// chat that's open on screen, and anything meant for another account.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let userInfo = notification.request.content.userInfo
+        guard Self.isForMe(userInfo) else {
+            completionHandler([])
+            return
+        }
         switch userInfo["type"] as? String {
         case "incoming_call" where IncomingCallAlerts.inAppRingerVisible:
             completionHandler([])
@@ -116,6 +133,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNU
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let userInfo = response.notification.request.content.userInfo
+        guard Self.isForMe(userInfo) else {
+            completionHandler()
+            return
+        }
         DispatchQueue.main.async {
             let router = AppRouter.shared
             switch userInfo["type"] as? String {

@@ -3,14 +3,15 @@ import SwiftUI
 
 /// The text chat with Ananya: the same agent as the call (VastuAgent in
 /// chat mode, so she writes fuller answers instead of speaking), in
-/// English or Hindi (the menu in the header). A photo shared here — from
+/// English or Hindi (the switch in the header). A photo shared here — from
 /// the camera or the gallery — comes back marked up with a numbered list
 /// of what she found; a room scan (RoomScanView) arrives through
 /// RoomScanHandoff with its marked photo and read.
 ///
 /// The chat is saved on the phone (AgentChatStore) as it goes, and picked
 /// up again next time — both the messages and what the model remembers —
-/// until the user starts a new chat.
+/// until the user starts a new chat. A call with her continues this chat
+/// and saves back into it.
 @MainActor
 final class AgentChatViewModel: ObservableObject {
     @Published private(set) var messages: [AgentChatMessage] = []
@@ -32,6 +33,7 @@ final class AgentChatViewModel: ObservableObject {
     private var turnChain: Task<Void, Never>?
     private var saveChain: Task<Void, Never>?
     private var handoff: AnyCancellable?
+    private var callSaves: AnyCancellable?
     private var started = false
 
     func start() {
@@ -41,10 +43,7 @@ final class AgentChatViewModel: ObservableObject {
             let store = self.store
             let saved = await Task.detached { store.load() }.value
             if let saved = saved, !saved.messages.isEmpty {
-                messages = saved.messages
-                nextId = (saved.messages.map(\.id).max() ?? 0) + 1
-                await agent.restore(historyJson: saved.history, images: saved.markable)
-                savedMarkable = saved.markable
+                await show(saved)
                 isLoaded = true
             } else {
                 isLoaded = true
@@ -53,6 +52,24 @@ final class AgentChatViewModel: ObservableObject {
             handoff = RoomScanHandoff.shared.$pending.compactMap { $0 }.receive(on: DispatchQueue.main).sink { [weak self] _ in
                 if let scan = RoomScanHandoff.shared.take() { self?.addRoomScan(scan) }
             }
+        }
+        // A call started from this chat added to it: pick that up for when they come back.
+        callSaves = AgentChatStore.callSaves.sink { [weak self] in self?.reloadAfterCall() }
+    }
+
+    private func show(_ saved: AgentChatStore.Saved) async {
+        messages = saved.messages
+        nextId = (saved.messages.map(\.id).max() ?? -1) + 1
+        await agent.restore(historyJson: saved.history, images: saved.markable)
+        savedMarkable = saved.markable
+    }
+
+    private func reloadAfterCall() {
+        enqueue { [self] in
+            let store = self.store
+            guard let saved = await Task.detached(operation: { store.load() }).value else { return }
+            chatGeneration += 1 // drop a reply still on its way to the chat as it was
+            await show(saved)
         }
     }
 
@@ -188,7 +205,7 @@ struct AgentChatView: View {
 
     var body: some View {
         ZStack {
-            CallTones.ink.ignoresSafeArea()
+            AgentScreenBackground()
             VStack(spacing: 0) {
                 header
                 AgentChatPage(
@@ -203,21 +220,21 @@ struct AgentChatView: View {
                         scanRoom: onScanRoom
                     ),
                     onOpenReport: { onOpenReport($0.id) },
-                    emptyHint: tr("Ask a question, send a photo of any room, or scan a whole room — \(AnanyaAgent.firstName) marks her Vastu suggestions right on the photo.",
-                                  "सवाल पूछें, किसी कमरे की फ़ोटो भेजें या पूरा कमरा स्कैन करें — \(AnanyaAgent.firstName) फ़ोटो पर ही निशान लगाकर वास्तु सुझाव देंगी।")
+                    emptyHint: tr("Ask a question, send a photo of any room, or scan a whole room — \(AnanyaAgent.name) marks her Vastu suggestions right on the photo.",
+                                  "सवाल पूछें, किसी कमरे की फ़ोटो भेजें या पूरा कमरा स्कैन करें — \(AnanyaAgent.name) फ़ोटो पर ही निशान लगाकर वास्तु सुझाव देंगी।")
                 )
             }
 
             if let photo = vm.photoToReview {
                 CaptureReviewSheet(
-                    frames: [photo.image], exifHeading: photo.exifHeading, isVideo: false, agentName: AnanyaAgent.firstName,
+                    frames: [photo.image], exifHeading: photo.exifHeading, isVideo: false, agentName: AnanyaAgent.name,
                     onRetake: { vm.photoToReview = nil; vm.openMedia(.camera) }, onDismiss: { vm.photoToReview = nil },
                     onSend: { vm.sendPhoto(question: $0, facing: $1) }
                 )
             }
             if let video = vm.videoToReview {
                 CaptureReviewSheet(
-                    frames: video.frames, exifHeading: nil, isVideo: true, agentName: AnanyaAgent.firstName,
+                    frames: video.frames, exifHeading: nil, isVideo: true, agentName: AnanyaAgent.name,
                     onRetake: { vm.discardVideo(retake: true) }, onDismiss: { vm.discardVideo(retake: false) },
                     onSend: { vm.sendVideo(question: $0, facing: $1) }
                 )
@@ -229,46 +246,26 @@ struct AgentChatView: View {
             Button(tr("Cancel", "रहने दें"), role: .cancel) {}
             Button(tr("New chat", "नई चैट")) { vm.startNewChat() }
         } message: {
-            Text(tr("The old chat and \(AnanyaAgent.firstName)'s memory of it will both be cleared.",
-                    "पुरानी चैट और \(AnanyaAgent.firstName) को उसकी याद, दोनों मिट जाएँगी।"))
+            Text(tr("The old chat and \(AnanyaAgent.name)'s memory of it will both be cleared.",
+                    "पुरानी चैट और \(AnanyaAgent.name) को उसकी याद, दोनों मिट जाएँगी।"))
         }
         .darkScreenStatusBar()
         .onAppear { vm.start() }
     }
 
-    /// Back, Ananya, then room scan, call, and a menu with the reply
-    /// language and "New chat". Kept to one line so it fits narrow phones.
+    /// The shared AgentHeader (room scan and reply language, same as the
+    /// call), with call and a menu holding "New chat".
     private var header: some View {
-        HStack(spacing: 4) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(CallTones.textPrimary).frame(width: 44, height: 44)
-            }
-            .accessibilityLabel(tr("Back", "वापस"))
-            AvatarImage(seed: AnanyaAgent.avatarSeed, placeholder: CallTones.surfaceRaised)
-                .frame(width: 40, height: 40).clipShape(Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(AnanyaAgent.name).font(.vt(16, .semibold)).foregroundColor(CallTones.textPrimary).lineLimit(1)
-                HStack(spacing: 6) {
-                    Circle().fill(Color.onlineGreen).frame(width: 7, height: 7)
-                    Text(vm.pendingTurns > 0 ? tr("Typing…", "लिख रही हैं…") : tr("AI Vastu expert", "AI वास्तु विशेषज्ञ"))
-                        .font(.vt(12, .medium)).foregroundColor(CallTones.textMuted).lineLimit(1)
-                }
-            }
-            .padding(.leading, 6)
-            Spacer(minLength: 4)
-            headerButton("safari", tr("Scan a room", "कमरा स्कैन करें"), action: onScanRoom)
+        AgentHeader(
+            subtitle: vm.pendingTurns > 0 ? tr("Typing…", "लिख रही हैं…") : tr("AI Vastu expert", "AI वास्तु विशेषज्ञ"),
+            statusDot: { Circle().fill(Color.onlineGreen).frame(width: 7, height: 7) },
+            onScanRoom: onScanRoom,
+            onBack: onBack
+        ) {
             if AnanyaAgent.callEnabled {
-                headerButton("phone.fill", tr("Call \(AnanyaAgent.name)", "\(AnanyaAgent.name) को कॉल करें"), action: onCall)
+                AgentHeaderButton(icon: "phone.fill", label: tr("Call \(AnanyaAgent.name)", "\(AnanyaAgent.name) को कॉल करें"), action: onCall)
             }
             Menu {
-                Section(tr("Reply language", "जवाब की भाषा")) {
-                    ForEach([(AgentLanguage.english, "English"), (AgentLanguage.hindi, "हिंदी")], id: \.0) { option, label in
-                        Button { language.set(option) } label: {
-                            if language.current == option { Label(label, systemImage: "checkmark") } else { Text(label) }
-                        }
-                    }
-                }
                 Button { confirmNewChat = true } label: { Label(tr("New chat", "नई चैट"), systemImage: "square.and.pencil") }
             } label: {
                 Image(systemName: "ellipsis").rotationEffect(.degrees(90)).font(.system(size: 18, weight: .semibold))
@@ -276,16 +273,5 @@ struct AgentChatView: View {
             }
             .accessibilityLabel(tr("More options", "और विकल्प"))
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 8)
-    }
-
-    private func headerButton(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Circle().fill(CallTones.surfaceRaised).frame(width: 40, height: 40)
-                .overlay(Image(systemName: icon).font(.system(size: 17)).foregroundColor(CallTones.textPrimary))
-        }
-        .padding(.horizontal, 2)
-        .accessibilityLabel(label)
     }
 }

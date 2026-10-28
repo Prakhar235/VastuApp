@@ -51,6 +51,15 @@ final class AuthRepository {
         return user
     }
 
+    /// Emails a password-reset link to `email`.
+    func sendPasswordReset(email: String) async throws {
+        do {
+            try await Auth.auth().sendPasswordReset(withEmail: email.trimmingCharacters(in: .whitespaces))
+        } catch {
+            throw Self.friendly(error)
+        }
+    }
+
     func signOut() {
         try? Auth.auth().signOut()
     }
@@ -99,6 +108,25 @@ final class UserRepository {
     /// Saves this device's push token so calls can ring it.
     func saveFcmToken(_ token: String) async throws {
         try await db.collection("users").document(try myUid()).updateData(["fcmToken": token])
+    }
+
+    /// Unlinks this device from the signed-in account before signing out, so
+    /// pushes for that account (calls, chats, likes) stop arriving here.
+    func clearFcmToken() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        try? await db.collection("users").document(uid).updateData(["fcmToken": FieldValue.delete()])
+    }
+
+    /// Changes the signed-in user's name and phone — on their account,
+    /// users/{uid}, and experts/{uid} for experts (so the directory shows it).
+    func updateNameAndPhone(name: String, phone: String) async throws {
+        guard let user = Auth.auth().currentUser else { throw AppError("No signed-in user") }
+        let change = user.createProfileChangeRequest()
+        change.displayName = name
+        try await change.commitChanges()
+        try await db.collection("users").document(user.uid).updateData(["name": name, "phone": phone])
+        let expertDoc = db.collection("experts").document(user.uid)
+        if try await expertDoc.getDocument().exists { try await expertDoc.updateData(["name": name]) }
     }
 
     /// The signed-in user's own profile (name, phone, photo…), live.
@@ -326,10 +354,53 @@ final class TokenRepository {
 
 // MARK: - Push token
 
-enum PushToken {
-    /// Best-effort — a missed save just means this device won't ring for calls until the next sign-in.
-    static func saveBestEffort() async {
-        guard let token = try? await Messaging.messaging().token() else { return }
-        try? await UserRepository().saveFcmToken(token)
+/// Keeps this phone's push token tied to whoever is signed in now. Another
+/// account used here before may still hold the token in its users/{uid}
+/// doc (we can't edit someone else's), so its calls and messages would keep
+/// arriving here. When the signed-in account isn't the one the token was
+/// last given to, the token is replaced: the old one stops working for
+/// everyone, and only the new account gets the new one.
+enum PushTokens {
+    private static let ownerKey = "push_token_owner_uid"
+    private static var authHandle: AuthStateDidChangeListenerHandle?
+    /// One claim at a time, in order.
+    private static var chain: Task<Void, Never>?
+
+    /// Watches sign-ins for the life of the app.
+    static func start() {
+        guard authHandle == nil else { return }
+        authHandle = Auth.auth().addStateDidChangeListener { _, user in
+            guard let uid = user?.uid else { return }
+            let previous = chain
+            chain = Task {
+                await previous?.value
+                await claim(for: uid)
+            }
+        }
+    }
+
+    private static func claim(for uid: String) async {
+        guard UserDefaults.standard.string(forKey: ownerKey) != uid else { return }
+        try? await Messaging.messaging().deleteToken()
+        // The APNs token may not be in yet, and right after sign-up the users/{uid}
+        // doc may not be written yet: give both a moment.
+        for attempt in 0..<6 {
+            if attempt > 0 { try? await Task.sleep(nanoseconds: 3_000_000_000) }
+            guard Auth.auth().currentUser?.uid == uid else { return } // signed out or switched meanwhile
+            do {
+                let token = try await Messaging.messaging().token()
+                try await UserRepository().saveFcmToken(token)
+                UserDefaults.standard.set(uid, forKey: ownerKey)
+                return
+            } catch {
+                continue
+            }
+        }
+        print("PushTokens: couldn't replace the push token")
+    }
+
+    /// After signing out: the next account to sign in gets a fresh token.
+    static func forget() {
+        UserDefaults.standard.removeObject(forKey: ownerKey)
     }
 }

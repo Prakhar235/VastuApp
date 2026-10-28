@@ -295,8 +295,7 @@ struct ExpertDisplayExtras {
 /// she picks up after a short ring.
 enum AnanyaAgent {
     static let id = "ai-agent-ananya"
-    static let name = "Ananya Verma"
-    static let firstName = "Ananya"
+    static let name = "Vastu Expert"
     static let specialty = "Residential Vastu"
     /// Seeds her pravatar.cc picture; changing it changes her face.
     static let avatarSeed = "demo-expert-ananya"

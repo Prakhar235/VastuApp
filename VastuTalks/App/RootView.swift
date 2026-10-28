@@ -43,7 +43,8 @@ struct RootView: View {
             // There's no OTP step: Firebase has already created the account.
             CreateAccountView(onBack: { router.pop() }, onAccountCreated: { router.setRoot(.home) })
         case .profile:
-            ProfileView(onBack: { router.pop() }, onSignOut: { router.signOut() })
+            ProfileView(onBack: { router.pop() }, onSignOut: { router.signOut() },
+                        onOpenNotifications: { router.push(.notifications) })
         case .expertProfile(let uid, let name):
             RealExpertProfileView(
                 expertUid: uid,
@@ -148,7 +149,7 @@ private struct FirebaseSetupNeededView: View {
             VStack(spacing: 14) {
                 Image(systemName: "sparkles").font(.system(size: 44, weight: .bold)).foregroundColor(.white)
                 Text("Firebase isn't set up yet").font(.vt(22)).foregroundColor(.white)
-                Text("Add GoogleService-Info.plist for the iOS app (bundle ID com.vastutalks.app) to the VastuTalks folder and rebuild. See README.md.")
+                Text("Add GoogleService-Info.plist for the iOS app (bundle ID com.vastucompany.vastutalks) to the VastuTalks folder and rebuild. See README.md.")
                     .font(.vt(14, .medium))
                     .foregroundColor(.white.opacity(0.85))
                     .multilineTextAlignment(.center)

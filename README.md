@@ -11,11 +11,16 @@ users can call each other. This folder is separate from the Android project.
   posts with likes, comments and replies, notifications, and one-to-one chat
 - Calls with experts start as audio; either side can turn the camera on, chat over the
   call, and the call ends for both when one hangs up
-- Ananya, the AI agent, in English or Hindi: a text chat (saved on the phone) and an
-  audio/video call. She marks her Vastu suggestions right on shared photos and videos,
-  and a guided room scan (from her chat) photographs each wall with the compass and
+- The AI agent (shown as "Vastu Expert"; "Ask Vastu Expert" on Home), in English or
+  Hindi: a text chat and an audio/video call that share one header (room scan and
+  language switch) and one saved conversation, kept per account on the phone. She
+  marks her Vastu suggestions right on shared photos and videos, and a guided room
+  scan (from her chat or during a call) photographs each wall with the compass and
   gives a score, numbered findings, fixes and a zone map. The shared whiteboard is
   hidden for now (`VastuAgent.boardEnabled`), as on Android
+- Search on Home (experts by name, specialty or city; posts by text or author),
+  forgot-password email, and Profile's Edit Profile, Notifications, Settings and
+  Call History
 
 Builds with Xcode 14.2 or newer.
 
@@ -31,7 +36,7 @@ and choose your Team.
 ## Firebase config (required)
 1. In the [Firebase Console](https://console.firebase.google.com/), open the
    **same project** the Android app uses → Project settings → **Add app → iOS**,
-   with bundle ID `com.vastutalks.app`.
+   with bundle ID `com.vastucompany.vastutalks` (`com.vastutalks.app` is taken on the App Store side).
 2. Download `GoogleService-Info.plist` and put it at
    `VastuTalks/GoogleService-Info.plist` (next to the `App` and `UI` folders).
    Keep it out of git, like `google-services.json` on Android.
@@ -63,6 +68,12 @@ Experts' phones ring through Firebase Cloud Messaging, like on Android:
    firebase deploy --only functions
    ```
    Android ignores the added `apns` block, so its behaviour doesn't change.
+
+Each phone's push token belongs to the account signed in on it: signing in with a
+different account replaces the token, and signing out unlinks it. Pushes carry
+`toUid`, and the app drops ones meant for another account while it's open. (A
+banner that arrives while the app is closed is shown by iOS itself and can't be
+filtered, but tapping one meant for another account does nothing.)
 
 The iPhone shows an "Incoming video/audio call" banner with sound; tapping it
 opens the full-screen Accept/Decline screen. With the app open on Home, experts
