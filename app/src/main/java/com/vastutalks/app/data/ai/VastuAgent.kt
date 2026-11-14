@@ -135,8 +135,8 @@ class VastuAgent(
     suspend fun analyzeRoom(walls: List<WallPhoto>): RoomAnalysis? {
         if (!isConfigured || walls.isEmpty()) return null
         val note = buildString {
-            append("Here are ${walls.size} photos of the room, in order (photo 0 to ${walls.size - 1}).")
-            walls.forEachIndexed { i, wall -> append(" Photo $i: ").append(wall.facing.describeForAgent()) }
+            append("Here are ${walls.size} frames from the video of my home, in order (photo 0 to ${walls.size - 1}).")
+            walls.forEachIndexed { i, wall -> append(" Photo $i: ").append(wall.describeForAgent()) }
         }
         val request = JSONObject()
             .put("model", visionModel)
@@ -166,8 +166,8 @@ class VastuAgent(
      */
     fun attachRoomScan(walls: List<WallPhoto>, analysis: RoomAnalysis) {
         val note = buildString {
-            append("(I scanned my room wall by wall: ${walls.size} photos, in order (frame 0 to ${walls.size - 1}).")
-            walls.forEachIndexed { i, wall -> append(" Frame $i: ").append(wall.facing.describeForAgent()) }
+            append("(I scanned my home with a video; here are ${walls.size} frames from it, in order (frame 0 to ${walls.size - 1}).")
+            walls.forEachIndexed { i, wall -> append(" Frame $i: ").append(wall.describeForAgent()) }
             append(")")
         }
         history.add(JSONObject().put("role", "user").put("content", userContent(note, walls.map { ImageMarkup.withGrid(it.bitmap) }, PhotoDetail.LOW)))
@@ -473,14 +473,14 @@ class VastuAgent(
 
         private fun systemPrompt(mode: AgentMode): String {
             val style = if (mode == AgentMode.CALL) """
-                You are the VastuTalks ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
+                You are ${AnanyaAgent.NAME} (${AnanyaAgent.NAME_HI}), VastuTalks' AI Vastu guide — a warm, practical ${AnanyaAgent.SPECIALTY} consultant on a live voice call
                 inside the VastuTalks app. Everything you "say" is read aloud by text-to-speech, so speak naturally:
                 1-3 short sentences (up to five when reading a photo or video), no lists, no emojis, and no markdown
                 except the ** highlighting below.
                 After answering, stop and let the caller talk — don't ramble or ask several questions at once.
                 Don't open every reply with a greeting; greet only once, at the start of the call.
             """.trimIndent() else """
-                You are the VastuTalks ${AnanyaAgent.NAME}, a warm, practical ${AnanyaAgent.SPECIALTY} consultant chatting by text
+                You are ${AnanyaAgent.NAME} (${AnanyaAgent.NAME_HI}), VastuTalks' AI Vastu guide — a warm, practical ${AnanyaAgent.SPECIALTY} consultant chatting by text
                 inside the VastuTalks app. Write plain text (no emojis, and no markdown except the ** highlighting below): a short paragraph, or a few
                 short lines starting with "• " when listing steps. Be specific and practical, and don't pad.
                 Don't open every reply with a greeting; greet only once, at the start of the chat.

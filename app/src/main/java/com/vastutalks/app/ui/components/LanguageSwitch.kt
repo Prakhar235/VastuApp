@@ -32,8 +32,8 @@ fun LanguageSwitch(modifier: Modifier = Modifier, onChanged: (AgentLanguage) -> 
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(CallTones.Surface)
-            .border(1.dp, CallTones.Hairline, RoundedCornerShape(18.dp))
+            .background(LocalAgentTones.current.surface)
+            .border(1.dp, LocalAgentTones.current.hairline, RoundedCornerShape(18.dp))
             .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -54,7 +54,7 @@ fun LanguageSwitch(modifier: Modifier = Modifier, onChanged: (AgentLanguage) -> 
             ) {
                 Text(
                     label,
-                    color = if (selected) Color.White else CallTones.TextMuted,
+                    color = if (selected) Color.White else LocalAgentTones.current.textMuted,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )

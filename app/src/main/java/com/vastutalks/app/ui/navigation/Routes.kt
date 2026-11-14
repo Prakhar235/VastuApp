@@ -5,6 +5,7 @@ object Routes {
     const val ONBOARDING = "onboarding"
     const val SIGN_IN = "sign_in"
     const val CREATE_ACCOUNT = "create_account"
+    const val FORGOT_PASSWORD = "forgot_password"
     const val HOME = "home"
     const val PROFILE = "profile"
     /** Vastu experts write a post for the users' Posts tab. */

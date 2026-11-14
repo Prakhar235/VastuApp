@@ -119,7 +119,8 @@ class AgentChatStore(context: Context) {
                 val wallList = JSONArray()
                 walls.forEachIndexed { i, wall ->
                     File(reportDir, "wall_$i.jpg").outputStream().use { wall.bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-                    wallList.put(JSONObject().put("degrees", wall.facing.degrees.toDouble()).put("source", wall.facing.source.name))
+                    val facing = wall.facing
+                    wallList.put(if (facing == null) JSONObject() else JSONObject().put("degrees", facing.degrees.toDouble()).put("source", facing.source.name))
                 }
                 File(reportDir, "report.json").writeText(
                     JSONObject().put("walls", wallList).put("analysis", JSONObject(analysis.toJson())).toString()
@@ -137,7 +138,7 @@ class AgentChatStore(context: Context) {
             val w = wallList.getJSONObject(i)
             WallPhoto(
                 BitmapFactory.decodeFile(File(reportDir, "wall_$i.jpg").path) ?: error("Missing photo $i"),
-                PhotoFacing(w.getDouble("degrees").toFloat(), PhotoFacing.Source.valueOf(w.getString("source")))
+                if (w.has("degrees")) PhotoFacing(w.getDouble("degrees").toFloat(), PhotoFacing.Source.valueOf(w.getString("source"))) else null
             )
         }
         RoomScanHandoff.Scan(walls, RoomAnalysis.parse(json.getJSONObject("analysis").toString(), walls.size))

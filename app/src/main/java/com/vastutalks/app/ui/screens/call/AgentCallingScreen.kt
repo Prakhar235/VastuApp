@@ -1,5 +1,8 @@
 package com.vastutalks.app.ui.screens.call
 
+import androidx.compose.ui.graphics.Brush
+import com.vastutalks.app.ui.components.AiOrb
+import com.vastutalks.app.ui.components.agentScreenBackground
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -61,21 +64,18 @@ fun AgentCallingScreen(
 
     DarkScreenStatusBar()
     Box(
-        modifier = Modifier.fillMaxSize().background(VastuCharcoal),
+        modifier = Modifier.fillMaxSize().agentScreenBackground(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                modifier = Modifier.size(120.dp).scale(scale).clip(CircleShape).background(VastuPrimary.copy(alpha = 0.25f)),
+                modifier = Modifier.size(180.dp),
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = "https://i.pravatar.cc/300?u=${AnanyaAgent.AVATAR_SEED}",
-                    contentDescription = null,
-                    modifier = Modifier.size(96.dp).clip(CircleShape).background(VastuPrimary)
-                )
+                Box(Modifier.fillMaxSize().scale(scale).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0x73C084FC), Color.Transparent))))
+                AiOrb(120.dp, ringWidth = 4.dp, iconSize = 46.dp, spinMillis = 2500)
             }
-            Box(modifier = Modifier.size(28.dp))
+            Box(modifier = Modifier.size(14.dp))
             Text(AnanyaAgent.NAME, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Box(modifier = Modifier.size(6.dp))
             Text(if (isVideo) tr("Video calling…", "वीडियो कॉल हो रही है…") else tr("Calling…", "कॉल हो रही है…"), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
@@ -84,7 +84,7 @@ fun AgentCallingScreen(
             Box(modifier = Modifier.size(64.dp))
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(70.dp)
                     .clip(CircleShape)
                     .background(Danger)
                     .clickable { onCancel() },

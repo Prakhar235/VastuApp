@@ -1,5 +1,6 @@
 package com.vastutalks.app.ui.screens.scan
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -80,7 +81,7 @@ private val Severity.color: Color
     }
 
 /**
- * Ananya's read of the scanned room: the score, each wall's photo with
+ * Ananya's read of the scanned home: the score, each video frame with
  * her findings numbered on it, and the list of what to fix, most
  * important first. Tapping a finding spotlights it on its photo.
  */
@@ -117,7 +118,8 @@ internal fun RoomResultScreen(viewModel: RoomScanViewModel, onBack: () -> Unit, 
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                 Text("${analysis.room} · ${tr("analysis", "विश्लेषण")}", color = CallTones.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    tr("${walls.size} walls · directions from the compass", "${walls.size} दीवारें · कम्पास से मापी दिशा"),
+                    if (walls.any { it.facing != null }) tr("${walls.size} frames from your video · directions from the compass", "वीडियो के ${walls.size} फ़्रेम · कम्पास से मापी दिशा")
+                    else tr("${walls.size} frames from your video", "वीडियो के ${walls.size} फ़्रेम"),
                     color = CallTones.TextMuted,
                     fontSize = 13.sp
                 )
@@ -127,11 +129,13 @@ internal fun RoomResultScreen(viewModel: RoomScanViewModel, onBack: () -> Unit, 
         ScoreCard(analysis.score, analysis.verdict, analysis.summary)
 
         if (walls.size > 1) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 walls.forEachIndexed { i, wall ->
                     val active = i == shownPhoto
+                    // Frames with findings first catch the eye: a dot after the label.
+                    val marked = analysis.findings.any { it.photo == i }
                     Text(
-                        wall.facing.direction.localName,
+                        "${i + 1}" + (wall.facing?.let { " · " + it.direction.short } ?: "") + if (marked) " •" else "",
                         color = if (active) Color.White else ScanTones.Body,
                         fontSize = 14.sp,
                         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
@@ -183,7 +187,7 @@ internal fun RoomResultScreen(viewModel: RoomScanViewModel, onBack: () -> Unit, 
         )
 
         PillButton(
-            tr("Ask ${AnanyaAgent.NAME} about this room", "${AnanyaAgent.NAME} से इस कमरे के बारे में पूछें"),
+            tr("Ask ${AnanyaAgent.NAME} about this room", "${AnanyaAgent.NAME_HI} से इस कमरे के बारे में पूछें"),
             modifier = Modifier.fillMaxWidth(),
             outlined = true,
             onClick = onAskAgent
@@ -254,7 +258,7 @@ private fun MarkedPhoto(
         BoxWithConstraints(modifier = Modifier.aspectRatio(ratio, matchHeightConstraintsFirst = ratio < 1f)) {
             val w = maxWidth
             val h = maxHeight
-            Image(image, contentDescription = tr("Wall photo", "दीवार की फ़ोटो"), contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
+            Image(image, contentDescription = tr("Video frame", "वीडियो फ़्रेम"), contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
             Canvas(modifier = Modifier.fillMaxSize()) {
                 findings.forEach { f ->
                     val alpha = if (selected == null || selected == f.number) 1f else 0.3f
@@ -297,7 +301,8 @@ private fun MarkedPhoto(
                     Text("${f.number}", color = Color(0xFF1A0E06), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
-            Row(
+            val facing = wall.facing
+            if (facing != null) Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(12.dp)
@@ -308,7 +313,7 @@ private fun MarkedPhoto(
             ) {
                 Icon(Icons.Outlined.Explore, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                 Text(
-                    tr("This wall: ", "यह दीवार: ") + "${wall.facing.direction.localName} · ${wall.facing.degrees.roundToInt() % 360}°",
+                    tr("Camera facing: ", "कैमरे की दिशा: ") + "${facing.direction.localName} · ${facing.degrees.roundToInt() % 360}°",
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,

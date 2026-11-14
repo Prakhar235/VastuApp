@@ -106,6 +106,16 @@ class AuthViewModel(
         }
     }
 
+    /** Emails a reset link; [onDone] gets whether it was sent, and an error message if not. */
+    fun requestPasswordReset(email: String, onDone: (sent: Boolean, error: String?) -> Unit) {
+        viewModelScope.launch {
+            authRepository.sendPasswordReset(email.trim()).fold(
+                onSuccess = { onDone(true, null) },
+                onFailure = { onDone(false, it.message ?: "Couldn't send the reset link.") }
+            )
+        }
+    }
+
     fun signOut() {
         authRepository.signOut()
     }

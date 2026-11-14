@@ -1,5 +1,11 @@
 package com.vastutalks.app.ui.screens.chat
 
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.RectangleShape
+import com.vastutalks.app.ui.components.softWashBackground
+import com.vastutalks.app.ui.theme.Poppins
+import com.vastutalks.app.ui.theme.PrimaryButtonGradient
+import com.vastutalks.app.ui.theme.TextPrimary
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
@@ -25,6 +31,16 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.SentimentSatisfied
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -202,27 +218,79 @@ fun ConversationScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceLight)
-            .statusBarsPadding()
+            .softWashBackground()
             .navigationBarsPadding()
             .imePadding()
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 4.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(8.dp, RectangleShape, ambientColor = Color(0x14000000), spotColor = Color(0x14000000))
+                .background(Color.White.copy(alpha = 0.92f))
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = Color(0xFF2B2B2B))
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = TextPrimary)
             }
-            ProfileAvatar(otherPhoto, viewModel.otherName, size = 40.dp)
-            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-                Text(viewModel.otherName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))
-                viewModel.otherExpert?.let { Text(it.displaySpecialty, fontSize = 12.sp, color = VastuPrimary) }
+            ProfileAvatar(otherPhoto, viewModel.otherName, size = 38.5.dp, shape = RoundedCornerShape(14.dp))
+            Column(modifier = Modifier.weight(1f).padding(start = 10.5.dp)) {
+                Text(viewModel.otherName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1)
+                val expert = viewModel.otherExpert
+                if (expert != null) {
+                    val now = System.currentTimeMillis()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(5.25.dp).clip(CircleShape).background(if (expert.isPresentAt(now)) Color(0xFF51CF66) else com.vastutalks.app.ui.screens.home.expertStatusColor(expert, now)))
+                        Text(
+                            " " + if (expert.isPresentAt(now)) "Online" else com.vastutalks.app.ui.screens.home.expertStatusLabel(expert, now),
+                            fontSize = 10.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium, maxLines = 1
+                        )
+                    }
+                }
             }
             // Chatting with an expert: the other way to reach them.
             viewModel.otherExpert?.takeIf { showCallButton }?.let { expert ->
-                IconButton(onClick = { onCall(expert.uid, expert.name) }) {
-                    Icon(Icons.Filled.Call, contentDescription = "Call", tint = VastuPrimary)
+                Box(
+                    Modifier
+                        .padding(end = 8.dp)
+                        .size(35.5.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(VastuPrimary.copy(alpha = 0.1f))
+                        .clickable { onCall(expert.uid, expert.name) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Videocam, contentDescription = "Video call", tint = VastuPrimary, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        // Session bar: time in this chat, cost (free for now) and the sample wallet.
+        if (viewModel.otherExpert != null) {
+            val started = remember { System.currentTimeMillis() }
+            val elapsed by produceState(0L) {
+                while (true) { value = (System.currentTimeMillis() - started) / 1000; kotlinx.coroutines.delay(1000) }
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF6C5CE7), Color(0xFF9333EA), Color(0xFF4F46E5))))
+                    .padding(horizontal = 17.5.dp, vertical = 10.5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SessionChip {
+                    Icon(Icons.Outlined.Schedule, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text(" %02d:%02d".format(elapsed / 60, elapsed % 60), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.25.sp)
+                }
+                Box(Modifier.width(10.5.dp))
+                SessionChip {
+                    Text("Cost: ", color = Color.White.copy(alpha = 0.8f), fontSize = 10.5.sp)
+                    Text(if (com.vastutalks.app.data.model.CallPricing.PAID_CALLS) "₹0.00" else "Free", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.25.sp)
+                }
+                Box(Modifier.weight(1f))
+                SessionChip {
+                    Icon(Icons.Outlined.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text(" " + com.vastutalks.app.data.model.SampleShop.balanceText, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.25.sp)
                 }
             }
         }
@@ -230,8 +298,8 @@ fun ConversationScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(17.5.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             if (messages.isEmpty()) {
                 item {
@@ -247,7 +315,13 @@ fun ConversationScreen(
             items(messages, key = { it.id }) { MessageBubble(it, mine = it.senderUid == viewModel.myUid) }
         }
 
-        Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 8.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(10.dp, RectangleShape, ambientColor = Color(0x0D000000), spotColor = Color(0x0D000000))
+                .background(Color.White.copy(alpha = 0.92f))
+                .padding(17.5.dp)
+        ) {
             viewModel.image?.let { picked ->
                 Box(modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)) {
                     Image(
@@ -271,47 +345,34 @@ fun ConversationScreen(
                 }
             }
             viewModel.error?.let { Text(it, fontSize = 12.sp, color = Danger, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.5.dp)) {
+                ComposerIcon(Icons.Outlined.Image, "Choose a photo") { pickPhoto() }
+                ComposerIcon(Icons.Outlined.AttachFile, "Take a photo") { takePhoto() }
+                ComposerIcon(Icons.Outlined.SentimentSatisfied, "Emoji") { viewModel.input += "🙏" }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    var menuOpen by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Outlined.AddPhotoAlternate, contentDescription = "Add a photo", tint = VastuPrimary)
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = Color.White) {
-                        DropdownMenuItem(
-                            text = { Text("Take a photo") },
-                            leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null) },
-                            onClick = { menuOpen = false; takePhoto() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Choose from gallery") },
-                            leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null) },
-                            onClick = { menuOpen = false; pickPhoto() }
-                        )
-                    }
-                }
                 OutlinedTextField(
                     value = viewModel.input,
                     onValueChange = { viewModel.input = it.take(2000) },
-                    placeholder = { Text("Message…", color = TextHint) },
-                    textStyle = TextStyle(color = Color(0xFF2B2B2B), fontSize = 14.sp),
+                    placeholder = { Text("Type your message...", color = TextHint, fontSize = 13.sp) },
+                    textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp, fontFamily = Poppins),
                     maxLines = 4,
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = InputFill,
-                        focusedContainerColor = InputFill,
-                        unfocusedBorderColor = InputFill,
-                        focusedBorderColor = VastuPrimary
+                        unfocusedContainerColor = Color(0xFFF7FAFC),
+                        focusedContainerColor = Color(0xFFF7FAFC),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = VastuPrimary.copy(alpha = 0.4f)
                     ),
                     modifier = Modifier.weight(1f)
                 )
                 val canSend = (viewModel.input.isNotBlank() || viewModel.image != null) && !viewModel.sending
                 Box(
                     modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(if (canSend) VastuPrimary else VastuPrimary.copy(alpha = 0.35f))
+                        .padding(start = 7.dp)
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .then(if (canSend) Modifier.background(PrimaryButtonGradient) else Modifier.background(VastuPrimary.copy(alpha = 0.35f)))
                         .clickable(enabled = canSend) { viewModel.send() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -327,13 +388,16 @@ private fun MessageBubble(message: ChatMessage, mine: Boolean) {
     val image = remember(message.image) {
         ProfilePhotos.decode(message.image)?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }
     }
-    val shape = if (mine) RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp) else RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)
+    val shape = if (mine) RoundedCornerShape(21.dp, 21.dp, 6.dp, 21.dp) else RoundedCornerShape(21.dp, 21.dp, 21.dp, 6.dp)
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(
             modifier = Modifier
+                .fillMaxWidth(0.75f)
+                .wrapContentWidth(if (mine) Alignment.End else Alignment.Start)
                 .widthIn(max = 280.dp)
+                .shadow(8.dp, shape, ambientColor = Color(0x1AA855F7), spotColor = Color(0x33A855F7))
                 .clip(shape)
-                .background(if (mine) VastuPrimary else Color.White)
+                .then(if (mine) Modifier.background(PrimaryButtonGradient) else Modifier.background(Color.White))
                 .padding(if (image != null) 4.dp else 0.dp)
         ) {
             image?.let {
@@ -344,17 +408,43 @@ private fun MessageBubble(message: ChatMessage, mine: Boolean) {
                     modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).clip(RoundedCornerShape(14.dp))
                 )
             }
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.5.dp)) {
                 if (message.text.isNotBlank()) {
-                    Text(message.text, fontSize = 14.sp, lineHeight = 20.sp, color = if (mine) Color.White else Color(0xFF2B2B2B))
+                    Text(message.text, fontSize = 12.25.sp, lineHeight = 20.sp, color = if (mine) Color.White else TextPrimary, fontWeight = if (mine) FontWeight.Medium else FontWeight.Normal)
                 }
                 Text(
                     SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(message.createdAtMillis)),
-                    fontSize = 10.sp,
-                    color = if (mine) Color.White.copy(alpha = 0.75f) else TextSecondary,
-                    modifier = Modifier.align(Alignment.End)
+                    fontSize = 10.5.sp,
+                    color = if (mine) Color.White.copy(alpha = 0.7f) else TextSecondary,
+                    modifier = Modifier.padding(top = 5.dp)
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SessionChip(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.2f))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
+}
+
+@Composable
+private fun ComposerIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .padding(end = 7.dp)
+            .size(32.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = label, tint = VastuPrimary, modifier = Modifier.size(18.dp))
     }
 }

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.filled.Close
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -140,6 +142,95 @@ private fun NotificationRow(notification: AppNotification, isNew: Boolean, onCli
         }
         if (isNew) {
             Box(modifier = Modifier.padding(start = 8.dp).size(9.dp).clip(CircleShape).background(VastuPrimary))
+        }
+    }
+}
+
+/**
+ * The design's notifications sheet (from the bell): "N new", Mark all read,
+ * and one row per notification with a tinted icon, title, time and
+ * message. Tapping a row marks it read and opens its post.
+ */
+@Composable
+fun NotificationsSheet(onDismiss: () -> Unit, onOpenPost: (String) -> Unit) {
+    val repository = remember { NotificationRepository() }
+    val notifications by remember { repository.listen() }.collectAsState(initial = null)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val list = notifications.orEmpty()
+    val unread = list.filter { !it.read }
+
+    com.vastutalks.app.ui.components.DesignSheet(
+        onDismiss = onDismiss,
+        radius = 24.dp,
+        scrim = Color(0x730F0B2E),
+        contentPadding = 0.dp,
+        showHandle = false
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(top = 10.dp, bottom = 4.dp)
+                .size(width = 40.dp, height = 4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color(0xFFE2E8F0))
+        )
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Notifications", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = com.vastutalks.app.ui.theme.TextPrimary)
+            if (unread.isNotEmpty()) Text("  ${unread.size} new", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = VastuPrimary)
+            Box(Modifier.weight(1f))
+            if (unread.isNotEmpty()) {
+                Text(
+                    "Mark all read", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = VastuPrimary,
+                    modifier = Modifier.padding(end = 10.dp).clickable { scope.launch { repository.markRead(unread.map { it.id }) } }
+                )
+            }
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(Color(0xFFF4F4F8)).clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Close, "Close", tint = com.vastutalks.app.ui.theme.TextBody, modifier = Modifier.size(16.dp))
+            }
+        }
+        Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 24.dp)) {
+            if (notifications != null && list.isEmpty()) {
+                Text(
+                    "Nothing yet. Likes and comments on your posts, and replies to your comments, show up here.",
+                    fontSize = 12.sp, color = TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(24.dp)
+                )
+            }
+            list.forEach { n ->
+                val (icon, tint) = when (n.type) {
+                    "like" -> Icons.Filled.Favorite to Color(0xFFE53E3E)
+                    "reply" -> Icons.AutoMirrored.Filled.Reply to VastuPrimary
+                    else -> Icons.Filled.ChatBubble to VastuPrimary
+                }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (!n.read) Color(0xFFF7F5FF) else Color.White)
+                        .clickable {
+                            scope.launch { repository.markRead(listOf(n.id)) }
+                            onDismiss()
+                            onOpenPost(n.postId)
+                        }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(Modifier.size(38.dp).clip(CircleShape).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                        Icon(icon, null, tint = tint, modifier = Modifier.size(17.dp))
+                    }
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(n.title, fontSize = 13.sp, fontWeight = if (n.read) FontWeight.Medium else FontWeight.Bold, color = com.vastutalks.app.ui.theme.TextPrimary, maxLines = 1, modifier = Modifier.weight(1f))
+                            Text(timeAgo(n.createdAtMillis), fontSize = 10.5.sp, color = com.vastutalks.app.ui.theme.TextHint, modifier = Modifier.padding(start = 8.dp))
+                        }
+                        if (n.body.isNotBlank()) Text(n.body, fontSize = 12.sp, lineHeight = 17.sp, color = TextSecondary, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
+                    }
+                    if (!n.read) Box(Modifier.padding(start = 8.dp, top = 6.dp).size(8.dp).clip(CircleShape).background(VastuPrimary))
+                }
+            }
         }
     }
 }

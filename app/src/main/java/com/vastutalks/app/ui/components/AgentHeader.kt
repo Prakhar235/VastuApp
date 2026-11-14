@@ -41,12 +41,12 @@ import com.vastutalks.app.ui.theme.VastuPrimary
 
 /** The dark backdrop with a violet glow shared by the agent chat and call. */
 fun Modifier.agentScreenBackground(): Modifier = this
-    .background(CallTones.Ink)
+    .background(Brush.linearGradient(listOf(Color(0xFF0F0B2E), Color(0xFF221859), Color(0xFF3B1D6E))))
     .background(
         Brush.radialGradient(
-            colors = listOf(VastuPrimary.copy(alpha = 0.22f), Color.Transparent),
-            center = Offset(0f, 0f),
-            radius = 1400f
+            colors = listOf(Color(0xFF7C3AED).copy(alpha = 0.35f), Color.Transparent),
+            center = Offset(540f, 0f),
+            radius = 900f
         )
     )
 
@@ -72,22 +72,18 @@ fun AgentHeader(
                     modifier = Modifier.size(44.dp).clip(CircleShape).clickable { onBack() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "वापस"), tint = CallTones.TextPrimary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "वापस"), tint = LocalAgentTones.current.textPrimary)
                 }
             } else {
                 Spacer(Modifier.size(width = 12.dp, height = 44.dp))
             }
             Box(modifier = Modifier.size(46.dp).border(2.dp, ringColor, CircleShape).padding(4.dp)) {
-                AsyncImage(
-                    model = "https://i.pravatar.cc/300?u=${AnanyaAgent.AVATAR_SEED}",
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape).background(CallTones.SurfaceRaised)
-                )
+                AiOrb(38.dp, ringWidth = 2.5.dp, iconSize = 17.dp, spinMillis = if (isSpeaking) 2500 else 6000)
             }
             Column(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 4.dp)) {
                 Text(
                     AnanyaAgent.NAME,
-                    color = CallTones.TextPrimary,
+                    color = LocalAgentTones.current.textPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
                     maxLines = 1,
@@ -97,7 +93,7 @@ fun AgentHeader(
                     statusDot()
                     Text(
                         subtitle,
-                        color = CallTones.TextMuted,
+                        color = LocalAgentTones.current.textMuted,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -115,8 +111,8 @@ fun AgentHeader(
                 modifier = Modifier
                     .height(38.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(CallTones.Surface)
-                    .border(1.dp, CallTones.Hairline, RoundedCornerShape(18.dp))
+                    .background(LocalAgentTones.current.surface)
+                    .border(1.dp, LocalAgentTones.current.hairline, RoundedCornerShape(18.dp))
                     .clickable(onClick = onScanRoom)
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -124,7 +120,7 @@ fun AgentHeader(
                 Icon(Icons.Outlined.Explore, contentDescription = null, tint = VastuPrimary, modifier = Modifier.size(18.dp))
                 Text(
                     tr("Scan a room", "कमरा स्कैन करें"),
-                    color = CallTones.TextPrimary,
+                    color = LocalAgentTones.current.textPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 8.dp)
@@ -144,10 +140,10 @@ fun AgentHeaderButton(icon: ImageVector, description: String, onClick: () -> Uni
             .padding(horizontal = 2.dp)
             .size(40.dp)
             .clip(CircleShape)
-            .background(CallTones.SurfaceRaised)
+            .background(LocalAgentTones.current.surfaceRaised)
             .clickable(onClickLabel = description, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = description, tint = CallTones.TextPrimary, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = description, tint = LocalAgentTones.current.textPrimary, modifier = Modifier.size(20.dp))
     }
 }

@@ -1,5 +1,6 @@
 package com.vastutalks.app.ui.components
 
+import androidx.compose.foundation.border
 import android.graphics.BitmapFactory
 import android.text.format.DateUtils
 import androidx.compose.foundation.Image
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -67,53 +69,69 @@ fun PostCard(
     onOpen: (() -> Unit)? = null,
     onAuthorClick: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
-    showComments: Boolean = true
+    showComments: Boolean = false,
+    following: Boolean = false,
+    onFollowClick: (() -> Unit)? = null
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     val image = remember(post.image) {
         ProfilePhotos.decode(post.image)?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }
     }
+    val openOnTap = if (onOpen != null) Modifier.clickable { onOpen() } else Modifier
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(Color.White)
+            .border(1.dp, com.vastutalks.app.ui.theme.CardBorder, RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (onAuthorClick != null) Modifier.clickable { onAuthorClick() } else Modifier)
-                .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 10.dp)
-        ) {
-            ProfileAvatar(post.authorPhoto, post.authorName, size = 38.dp)
-            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-                Text(post.authorName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF2B2B2B))
-                Text(
-                    "${post.authorSpecialty} · ${timeAgo(post.createdAtMillis)}",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (onAuthorClick != null) Modifier.clickable { onAuthorClick() } else Modifier)
+            ) {
+                ProfileAvatar(post.authorPhoto, post.authorName, size = 34.dp)
+                Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                    Text(post.authorName, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, color = com.vastutalks.app.ui.theme.TextPrimary, maxLines = 1)
+                    Text(timeAgo(post.createdAtMillis), fontSize = 10.5.sp, color = com.vastutalks.app.ui.theme.TextHint, modifier = Modifier.padding(top = 1.dp))
+                }
             }
             if (onDelete != null) {
                 Box(
-                    modifier = Modifier.size(36.dp).clip(CircleShape).clickable { confirmDelete = true },
+                    modifier = Modifier.size(32.dp).clip(CircleShape).clickable { confirmDelete = true },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete post", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete post", tint = TextSecondary, modifier = Modifier.size(18.dp))
                 }
+            } else if (onFollowClick != null) {
+                Text(
+                    if (following) "Following" else "Follow",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (following) VastuPrimary else Color.White,
+                    modifier = Modifier
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (following) Color.White else VastuPrimary)
+                        .border(1.dp, VastuPrimary, RoundedCornerShape(999.dp))
+                        .clickable { onFollowClick() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
             }
         }
 
-        val openOnTap = if (onOpen != null) Modifier.clickable { onOpen() } else Modifier
         if (post.text.isNotBlank()) {
             Text(
                 post.text,
-                fontSize = 14.sp,
-                color = Color(0xFF2B2B2B),
+                fontSize = 12.5.sp,
+                color = Color(0xFF2D3748),
                 lineHeight = 20.sp,
-                modifier = Modifier.fillMaxWidth().then(openOnTap).padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                modifier = Modifier.fillMaxWidth().then(openOnTap)
             )
         }
 
@@ -122,30 +140,26 @@ fun PostCard(
                 it,
                 contentDescription = "Picture in ${post.authorName}'s post",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).then(openOnTap)
+                modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)).then(openOnTap)
             )
         }
 
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFF1F0F6)))
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
             PostAction(
                 icon = if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                label = if (post.likeCount > 0) "${post.likeCount}" else "Like",
-                tint = if (liked) Danger else TextSecondary,
-                onClick = onLikeClick,
-                modifier = Modifier.weight(1f)
+                label = "${post.likeCount}",
+                tint = if (liked) Color(0xFFE53E3E) else TextSecondary,
+                onClick = onLikeClick
             )
             PostAction(
                 icon = Icons.Outlined.ChatBubbleOutline,
-                label = when (post.commentCount) {
-                    0L -> "Comment"
-                    1L -> "1 comment"
-                    else -> "${post.commentCount} comments"
-                },
+                label = "${post.commentCount}",
                 tint = TextSecondary,
                 onClick = { onOpen?.invoke() },
-                modifier = Modifier.weight(1f)
+                iconSize = 15.dp
             )
+            Box(Modifier.weight(1f))
+            Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Save", tint = TextSecondary, modifier = Modifier.size(15.dp))
         }
 
         if (showComments && post.recentComments.isNotEmpty()) {
@@ -153,7 +167,7 @@ fun PostCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(openOnTap)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
+                    .padding(top = 0.dp)
             ) {
                 if (post.commentCount > post.recentComments.size) {
                     Text(
@@ -167,7 +181,7 @@ fun PostCard(
                 post.recentComments.forEach { comment ->
                     Text(
                         buildAnnotatedString {
-                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))) {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = com.vastutalks.app.ui.theme.TextPrimary)) {
                                 append(comment.authorName)
                             }
                             if (comment.authorIsExpert) {
@@ -182,7 +196,7 @@ fun PostCard(
                             append(comment.text)
                         },
                         fontSize = 13.sp,
-                        color = Color(0xFF2B2B2B),
+                        color = com.vastutalks.app.ui.theme.TextPrimary,
                         lineHeight = 18.sp,
                         maxLines = 3,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -214,17 +228,13 @@ fun PostCard(
 }
 
 @Composable
-private fun PostAction(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PostAction(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit, iconSize: androidx.compose.ui.unit.Dp = 16.dp) {
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
-        Text(" $label", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = tint)
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
+        Text(" $label", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = tint)
     }
 }
 

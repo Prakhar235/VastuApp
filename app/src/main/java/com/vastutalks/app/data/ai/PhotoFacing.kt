@@ -37,6 +37,8 @@ data class PhotoFacing(val degrees: Float, val source: Source) {
         PHOTO,
         /** Read from the phone's compass while the caller reviewed the photo. */
         COMPASS,
+        /** No compass: the gyroscope tracked how far the phone turned from a direction the caller set. */
+        TRACKED,
         /** Picked by the caller. */
         CALLER
     }
@@ -49,6 +51,7 @@ data class PhotoFacing(val degrees: Float, val source: Source) {
         val how = when (source) {
             Source.PHOTO -> "according to the compass reading saved in the photo (about ${degrees.roundToInt()}° from North)"
             Source.COMPASS -> "according to the phone's compass (about ${degrees.roundToInt()}° from North)"
+            Source.TRACKED -> "according to the phone's motion sensors, counted from a direction the caller set (about ${degrees.roundToInt()}° from North)"
             Source.CALLER -> "according to the caller"
         }
         return "The camera was pointing ${d.label} (${d.vastuName}) $how. So the wall or area straight ahead in the " +

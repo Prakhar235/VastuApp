@@ -14,19 +14,19 @@ import androidx.core.view.WindowCompat
 private val LightColors = lightColorScheme(
     primary = VastuPrimary,
     onPrimary = Color.White,
-    secondary = VastuCopper,
+    secondary = VastuIndigo,
     onSecondary = Color.White,
     background = SurfaceLight,
-    onBackground = VastuCharcoal,
+    onBackground = TextPrimary,
     surface = CardWhite,
-    onSurface = VastuCharcoal,
+    onSurface = TextPrimary,
     error = Danger
 )
 
 private val DarkColors = darkColorScheme(
     primary = VastuVioletStart,
     onPrimary = Color.White,
-    secondary = VastuCopper,
+    secondary = VastuIndigo,
     background = VastuCharcoal,
     surface = Color(0xFF1F1D29),
     onSurface = Color.White

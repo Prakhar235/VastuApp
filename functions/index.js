@@ -15,7 +15,7 @@ const db = admin.firestore();
  * in Secret Manager — set it once with:
  *   firebase functions:secrets:set AGORA_APP_CERTIFICATE
  */
-const AGORA_APP_ID = "6245c3b5f0ce469aa17aeae3377901a9";
+const AGORA_APP_ID = "2fa4680d2f2c48e2831d8bece8cc6e4a";
 const AGORA_APP_CERTIFICATE = defineSecret("AGORA_APP_CERTIFICATE");
 
 const TOKEN_EXPIRATION_SECONDS = 23 * 60 * 60; // ~23h — just under Agora's 24h hard cap, cached and reused client-side

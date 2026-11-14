@@ -27,7 +27,9 @@ data class ProfileUiState(
     val pendingPhoto: android.graphics.Bitmap? = null,
     /** For the badge on Notifications. */
     val unreadNotifications: Int = 0,
-    val savingDetails: Boolean = false
+    val savingDetails: Boolean = false,
+    /** Chats with experts (newest first), for the History tab. */
+    val chats: List<com.vastutalks.app.data.model.Chat> = emptyList()
 )
 
 class ProfileViewModel(
@@ -48,6 +50,13 @@ class ProfileViewModel(
             runCatching {
                 NotificationRepository().listen().collect { list ->
                     _uiState.value = _uiState.value.copy(unreadNotifications = list.count { !it.read })
+                }
+            }
+        }
+        viewModelScope.launch {
+            runCatching {
+                com.vastutalks.app.data.repository.ChatRepository().listenMyChats().collect { list ->
+                    _uiState.value = _uiState.value.copy(chats = list.sortedByDescending { it.lastMessageAtMillis })
                 }
             }
         }
@@ -81,6 +90,14 @@ class ProfileViewModel(
             val result = userRepository.updateNameAndPhone(name.trim(), phone.trim())
             _uiState.value = _uiState.value.copy(savingDetails = false)
             onDone(result.exceptionOrNull()?.let { "Couldn't save: ${it.message}" })
+        }
+    }
+
+    /** Clears the profile photo. */
+    fun removePhoto() {
+        viewModelScope.launch {
+            val result = userRepository.updatePhoto("")
+            result.exceptionOrNull()?.let { _uiState.value = _uiState.value.copy(errorMessage = "Couldn't remove your photo: ${it.message}") }
         }
     }
 

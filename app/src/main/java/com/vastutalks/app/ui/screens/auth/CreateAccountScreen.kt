@@ -1,5 +1,28 @@
 package com.vastutalks.app.ui.screens.auth
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import com.vastutalks.app.ui.components.CompassMark
+import com.vastutalks.app.ui.components.DarkScreenStatusBar
+import com.vastutalks.app.ui.components.NightHero
+import com.vastutalks.app.ui.components.SecureNote
+import com.vastutalks.app.ui.components.SquareIconButton
+import com.vastutalks.app.ui.theme.CardBorder
+import com.vastutalks.app.ui.theme.TextBody
+import com.vastutalks.app.ui.theme.TextPrimary
+import com.vastutalks.app.ui.theme.TextSecondary
+import com.vastutalks.app.ui.theme.VastuPrimarySoft
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +41,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
@@ -91,6 +115,9 @@ fun CreateAccountScreen(
     }
 
     val isExpert = selectedRole == UserRole.VASTU_EXPERT
+    val context = androidx.compose.ui.platform.LocalContext.current
+    /** An expert's application went through: show "Application submitted". */
+    var submitted by remember { mutableStateOf(false) }
     // Everything still missing, so the user knows why the button is disabled.
     val missing = buildList {
         if (isExpert && photo == null) add("profile photo")
@@ -109,269 +136,306 @@ fun CreateAccountScreen(
     }
     val canSubmit = missing.isEmpty()
 
-    Box(
+    DarkScreenStatusBar()
+    Box(Modifier.fillMaxSize()) {
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AuthGradient)
+            .background(Color.White)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header
-            Column(modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = Color.White)
+        NightHero(Modifier.fillMaxWidth()) {
+            Column(Modifier.statusBarsPadding().padding(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 42.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    SquareIconButton(
+                        Icons.Filled.ChevronLeft, "Back", onBack,
+                        size = 36.dp, tint = Color.White,
+                        background = Color.White.copy(alpha = 0.1f),
+                        borderColor = Color.White.copy(alpha = 0.18f)
+                    )
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        CompassMark(15.dp)
+                        Text("Vastu Talks", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 7.dp))
                     }
-                    Text("Back", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Box(Modifier.size(36.dp))
                 }
                 Text(
-                    text = "Create Account",
+                    "Create your account",
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp, start = 8.dp)
+                    modifier = Modifier.padding(top = 22.dp, bottom = 6.dp)
                 )
                 Text(
-                    text = "Join Vastu Talks today",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 4.dp, start = 8.dp, bottom = 8.dp)
+                    if (isExpert) "Share your Vastu expertise and consult clients across India." else "Get AI Vastu insights and guidance from certified experts.",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 12.5.sp
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .offset(y = (-20).dp)
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .background(Color.White)
+                .navigationBarsPadding()
+                .padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                RoleCard(
+                    title = "User",
+                    sub = "Seek guidance",
+                    icon = Icons.Outlined.Home,
+                    selected = selectedRole == UserRole.NORMAL_USER,
+                    modifier = Modifier.weight(1f)
+                ) { selectedRole = UserRole.NORMAL_USER }
+                RoleCard(
+                    title = "Vastu Expert",
+                    sub = "Offer consultations",
+                    icon = Icons.Outlined.WorkspacePremium,
+                    selected = selectedRole == UserRole.VASTU_EXPERT,
+                    modifier = Modifier.weight(1f)
+                ) { selectedRole = UserRole.VASTU_EXPERT }
+            }
+
+            // Experts need a photo for their card in the directory.
+            if (isExpert) Row(verticalAlignment = Alignment.CenterVertically) {
+                ProfilePhotoEditor(
+                    photo = "",
+                    name = fullName,
+                    size = 60.dp,
+                    picked = photo,
+                    onPicked = { photo = it }
+                )
+                Text(
+                    when {
+                        photo != null -> "Tap to change photo"
+                        isExpert -> "Add your profile photo (required)"
+                        else -> "Add a profile photo (optional)"
+                    },
+                    fontSize = 12.sp,
+                    color = if (photo == null && isExpert) VastuPrimary else TextSecondary,
+                    modifier = Modifier.padding(start = 14.dp)
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(Color.White)
-            ) {
-                Column(
+            VastuTextField(value = fullName, onValueChange = { fullName = it }, placeholder = "Full name", leadingIcon = Icons.Outlined.Person)
+            VastuTextField(value = email, onValueChange = { email = it }, placeholder = "Email", leadingIcon = Icons.Outlined.Email, keyboardType = KeyboardType.Email)
+            Box {
+                VastuTextField(value = mobile, onValueChange = { mobile = it }, placeholder = "Mobile number", leadingIcon = Icons.Outlined.PhoneAndroid, keyboardType = KeyboardType.Phone)
+                // WhatsApp verification isn't wired up yet; the button says so instead of pretending.
+                Text(
+                    "Verify",
+                    color = Color.White,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .navigationBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 28.dp)
-                ) {
-                    FieldLabel("I am a...")
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF3F1F7))
-                            .padding(4.dp)
-                    ) {
-                        RoleTab(
-                            label = "Normal User",
-                            icon = Icons.Filled.Person,
-                            selected = selectedRole == UserRole.NORMAL_USER,
-                            modifier = Modifier.weight(1f)
-                        ) { selectedRole = UserRole.NORMAL_USER }
-                        RoleTab(
-                            label = "Vastu Expert",
-                            icon = Icons.Filled.Support,
-                            selected = selectedRole == UserRole.VASTU_EXPERT,
-                            modifier = Modifier.weight(1f)
-                        ) { selectedRole = UserRole.VASTU_EXPERT }
-                    }
-                    if (selectedRole == UserRole.VASTU_EXPERT) {
-                        Text(
-                            text = "You'll be listed for normal users to call, and won't see the expert directory yourself.",
-                            fontSize = 12.sp,
-                            color = VastuPrimary,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        ProfilePhotoEditor(
-                            photo = "",
-                            name = fullName,
-                            size = 96.dp,
-                            picked = photo,
-                            onPicked = { photo = it }
-                        )
-                        Text(
-                            when {
-                                photo != null -> "Tap to change photo"
-                                isExpert -> "Add your profile photo (required)"
-                                else -> "Add a profile photo (optional)"
-                            },
-                            fontSize = 12.sp,
-                            color = if (photo == null && isExpert) VastuPrimary else Color(0xFF6B6878),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-
-                    FieldLabel("Full Name", topPadding = 16.dp)
-                    VastuTextField(
-                        value = fullName,
-                        onValueChange = { fullName = it },
-                        placeholder = "John Doe",
-                        leadingIcon = Icons.Filled.Person
-                    )
-
-                    FieldLabel("Email", topPadding = 16.dp)
-                    VastuTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        placeholder = "you@example.com",
-                        leadingIcon = Icons.Filled.Email,
-                        keyboardType = KeyboardType.Email
-                    )
-
-                    FieldLabel("Mobile Number", topPadding = 16.dp)
-                    VastuTextField(
-                        value = mobile,
-                        onValueChange = { mobile = it },
-                        placeholder = "+91 98765 43210",
-                        leadingIcon = Icons.Filled.Phone,
-                        keyboardType = KeyboardType.Phone
-                    )
-
-                    if (isExpert) {
-                        FieldLabel("Specialty", topPadding = 16.dp)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            EXPERT_SPECIALTIES.forEach { option ->
-                                val selected = specialty == option
-                                Text(
-                                    option,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selected) Color.White else Color(0xFF6B6878),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(if (selected) VastuPrimary else Color(0xFFF3F1F7))
-                                        .clickable { specialty = option }
-                                        .padding(horizontal = 14.dp, vertical = 9.dp)
-                                )
-                            }
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 9.dp)
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(Color(0xFF25D366).copy(alpha = if (mobile.filter(Char::isDigit).length >= 10) 1f else 0.45f))
+                        .clickable {
+                            android.widget.Toast.makeText(context, "WhatsApp verification is coming soon — your number is saved as entered.", android.widget.Toast.LENGTH_LONG).show()
                         }
-
-                        FieldLabel("Years of Experience", topPadding = 16.dp)
-                        VastuTextField(
-                            value = experience,
-                            onValueChange = { experience = it.filter(Char::isDigit).take(2) },
-                            placeholder = "e.g. 10",
-                            leadingIcon = Icons.Filled.WorkspacePremium,
-                            keyboardType = KeyboardType.Number
-                        )
-
-                        FieldLabel("City", topPadding = 16.dp)
-                        VastuTextField(
-                            value = city,
-                            onValueChange = { city = it },
-                            placeholder = "e.g. Mumbai",
-                            leadingIcon = Icons.Filled.LocationOn
-                        )
-
-                        FieldLabel("About You", topPadding = 16.dp)
-                        VastuTextField(
-                            value = bio,
-                            onValueChange = { bio = it.take(400) },
-                            placeholder = "Your experience, approach and what you help clients with",
-                            leadingIcon = Icons.Filled.Info,
-                            minLines = 3
-                        )
-                    }
-
-                    FieldLabel("Password", topPadding = 16.dp)
-                    VastuTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        placeholder = "Create password",
-                        leadingIcon = Icons.Filled.Lock,
-                        isPassword = true,
-                        passwordVisible = passwordVisible,
-                        onTogglePasswordVisibility = { passwordVisible = !passwordVisible }
-                    )
-
-                    FieldLabel("Confirm Password", topPadding = 16.dp)
-                    VastuTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
-                        placeholder = "Re-enter password",
-                        leadingIcon = Icons.Filled.Lock,
-                        isPassword = true,
-                        passwordVisible = confirmPasswordVisible,
-                        onTogglePasswordVisibility = { confirmPasswordVisible = !confirmPasswordVisible }
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 18.dp)
-                    ) {
-                        Checkbox(
-                            checked = agreedToTerms,
-                            onCheckedChange = { agreedToTerms = it },
-                            colors = CheckboxDefaults.colors(checkedColor = VastuPrimary)
-                        )
-                        Row {
-                            Text("I agree to the ", fontSize = 13.sp, color = Color(0xFF4A4A4A))
-                            Text(
-                                "Terms",
-                                fontSize = 13.sp,
-                                color = VastuPrimary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { onOpenTerms() }
-                            )
-                            Text(" and ", fontSize = 13.sp, color = Color(0xFF4A4A4A))
-                            Text(
-                                "Privacy Policy",
-                                fontSize = 13.sp,
-                                color = VastuPrimary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { onOpenPrivacyPolicy() }
-                            )
-                        }
-                    }
-
-                    if (errorText != null) {
-                        Box(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = errorText ?: "",
-                            fontSize = 13.sp,
-                            color = Color(0xFFD32F2F)
-                        )
-                    }
-
-                    Box(modifier = Modifier.height(24.dp))
-
-                    GradientButton(
-                        text = "Create Account",
-                        enabled = canSubmit,
-                        isLoading = uiState.isLoading,
-                        onClick = {
-                            errorText = null
-                            authViewModel.signUp(
-                                fullName = fullName,
-                                email = email,
-                                password = password,
-                                role = selectedRole,
-                                phone = mobile,
-                                photo = photo,
-                                expert = if (isExpert) ExpertDetails(specialty, experience.toInt(), city.trim(), bio.trim()) else null,
-                                onSuccess = onAccountCreated
-                            )
-                        }
-                    )
-                    if (!canSubmit) {
-                        Text(
-                            "Still needed: " + missing.joinToString(", "),
-                            fontSize = 12.sp,
-                            color = Color(0xFF6B6878),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-
-                    Box(modifier = Modifier.height(24.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                )
+            }
+            VastuTextField(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = "Password",
+                leadingIcon = Icons.Outlined.Lock,
+                isPassword = true,
+                passwordVisible = passwordVisible,
+                onTogglePasswordVisibility = { passwordVisible = !passwordVisible }
+            )
+            Column {
+                VastuTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    placeholder = "Confirm password",
+                    leadingIcon = Icons.Outlined.Lock,
+                    isPassword = true,
+                    passwordVisible = confirmPasswordVisible,
+                    onTogglePasswordVisibility = { confirmPasswordVisible = !confirmPasswordVisible }
+                )
+                if (confirmPassword.isNotEmpty() && password != confirmPassword) {
+                    Text("Passwords do not match", fontSize = 11.sp, color = Color(0xFFE53E3E), modifier = Modifier.padding(start = 4.dp, top = 6.dp))
                 }
+            }
+
+            if (isExpert) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("EXPERT DETAILS", color = VastuPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp)
+                    Box(Modifier.padding(start = 10.dp).weight(1f).height(1.dp).background(Color(0xFFEFEFF4)))
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    EXPERT_SPECIALTIES.forEach { (label, option) ->
+                        val selected = specialty == option
+                        Text(
+                            label,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (selected) VastuPrimary else TextBody,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (selected) VastuPrimarySoft else Color.White)
+                                .border(1.dp, if (selected) VastuPrimary else CardBorder, RoundedCornerShape(999.dp))
+                                .clickable { specialty = option }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    VastuTextField(
+                        value = experience,
+                        onValueChange = { experience = it.filter(Char::isDigit).take(2) },
+                        placeholder = "Experience (yrs)",
+                        leadingIcon = Icons.Outlined.WorkspacePremium,
+                        keyboardType = KeyboardType.Number,
+                        modifier = Modifier.weight(1f)
+                    )
+                    VastuTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        placeholder = "City",
+                        leadingIcon = Icons.Outlined.LocationOn,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                VastuTextField(
+                    value = bio,
+                    onValueChange = { bio = it.take(400) },
+                    placeholder = "About you: experience, approach and what you help clients with",
+                    leadingIcon = Icons.Outlined.Info,
+                    minLines = 3
+                )
+                Text("We verify every expert profile within 24 hours before it goes live.", fontSize = 11.sp, color = TextSecondary, lineHeight = 16.sp)
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(20.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (agreedToTerms) VastuPrimary else Color.White)
+                        .border(1.5.dp, if (agreedToTerms) VastuPrimary else Color(0xFFCBD5E0), RoundedCornerShape(6.dp))
+                        .clickable { agreedToTerms = !agreedToTerms },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (agreedToTerms) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                }
+                Text("I agree to the ", fontSize = 11.5.sp, color = TextSecondary, modifier = Modifier.padding(start = 10.dp).clickable { agreedToTerms = !agreedToTerms })
+                Text("Terms", fontSize = 11.5.sp, color = VastuPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onOpenTerms() })
+                Text(" and ", fontSize = 11.5.sp, color = TextSecondary)
+                Text("Privacy Policy", fontSize = 11.5.sp, color = VastuPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onOpenPrivacyPolicy() })
+            }
+
+            if (errorText != null) {
+                Text(text = errorText ?: "", fontSize = 12.sp, color = Color(0xFFE53E3E))
+            }
+
+            GradientButton(
+                text = if (isExpert) "Apply as Expert" else "Create Account",
+                enabled = canSubmit,
+                isLoading = uiState.isLoading,
+                onClick = {
+                    errorText = null
+                    authViewModel.signUp(
+                        fullName = fullName,
+                        email = email,
+                        password = password,
+                        role = selectedRole,
+                        phone = mobile,
+                        photo = photo,
+                        expert = if (isExpert) ExpertDetails(specialty, experience.toInt(), city.trim(), bio.trim()) else null,
+                        onSuccess = { if (isExpert) submitted = true else onAccountCreated() }
+                    )
+                }
+            )
+            if (!canSubmit) {
+                Text(
+                    "Still needed: " + missing.joinToString(", "),
+                    fontSize = 11.5.sp,
+                    color = TextSecondary,
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                Text("Already have an account? ", color = TextSecondary, fontSize = 12.5.sp)
+                Text("Sign in", color = VastuPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onBack() })
+            }
+            SecureNote(Modifier.padding(bottom = 16.dp))
+        }
+    }
+    if (submitted) ApplicationSubmitted(onDone = {
+        authViewModel.signOut()
+        onBack()
+    })
+    }
+}
+
+/** The design's "Application submitted" dialog after an expert applies. */
+@Composable
+private fun ApplicationSubmitted(onDone: () -> Unit) {
+    androidx.activity.compose.BackHandler(onBack = onDone)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0x8C0F0B2E))
+            .clickable(enabled = false) {}
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White)
+                .padding(start = 22.dp, end = 22.dp, top = 28.dp, bottom = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(Modifier.size(68.dp).clip(CircleShape).background(Color(0xFFECFDF5)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF10B981)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                }
+            }
+            Text("Application submitted", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(top = 18.dp))
+            Text(
+                "Your account has been successfully created and submitted for review! Our team will connect with you within 24 working hours. Thank you for your patience!",
+                fontSize = 12.5.sp, lineHeight = 20.sp, color = TextBody, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+            Row(
+                Modifier
+                    .padding(top = 20.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFF7F5FF))
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Outlined.Schedule, null, tint = VastuPrimary, modifier = Modifier.size(14.dp))
+                Text(" Status: Under review", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = VastuPrimary)
+            }
+            Box(
+                Modifier
+                    .padding(top = 20.dp)
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(VastuPrimary)
+                    .clickable(onClick = onDone),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Back to Sign In", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -379,54 +443,56 @@ fun CreateAccountScreen(
 
 /** The specialties an expert can pick at sign-up (shown on their card and profile). */
 private val EXPERT_SPECIALTIES = listOf(
-    "Residential Vastu",
-    "Commercial Vastu",
-    "Industrial Vastu",
-    "Interior Vastu",
-    "Plot & Land Vastu",
-    "Spiritual Consultation"
+    "Residential" to "Residential Vastu",
+    "Commercial" to "Commercial Vastu",
+    "Industrial" to "Industrial Vastu",
+    "Astrology" to "Astrology & Vastu",
+    "Interior" to "Interior Vastu",
+    "Plot & Land" to "Plot & Land Vastu",
 )
 
 @Composable
-private fun RoleTab(
-    label: String,
+private fun RoleCard(
+    title: String,
+    sub: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(9.dp))
-            .background(if (selected) VastuPrimary else Color.Transparent)
-            .clickable { onClick() },
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+    Box(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) Color(0xFFF7F5FF) else Color.White)
+            .border(1.5.dp, if (selected) VastuPrimary else CardBorder, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(14.dp)
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (selected) Color.White else Color(0xFF6B6878),
-            modifier = Modifier.size(16.dp)
-        )
-        Text(
-            text = label,
-            color = if (selected) Color.White else Color(0xFF6B6878),
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(start = 6.dp)
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (selected) VastuPrimary else Color(0xFFF3F0FF)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = if (selected) Color.White else VastuPrimary, modifier = Modifier.size(17.dp))
+            }
+            Column {
+                Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(sub, fontSize = 10.5.sp, color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(if (selected) VastuPrimary else Color.White)
+                .border(1.5.dp, if (selected) VastuPrimary else Color(0xFFCBD5E0), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(11.dp))
+        }
     }
-}
-
-@Composable
-private fun FieldLabel(text: String, topPadding: androidx.compose.ui.unit.Dp = 0.dp) {
-    Text(
-        text = text,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color(0xFF2B2B2B),
-        modifier = Modifier.padding(top = topPadding, bottom = 8.dp)
-    )
 }

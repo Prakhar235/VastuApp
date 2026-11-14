@@ -17,6 +17,7 @@ class VastuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         com.vastutalks.app.data.ai.AgentLanguagePref.init(this)
+        com.vastutalks.app.data.model.SampleShop.init(this)
         createIncomingCallChannel()
         createPostActivityChannel()
         com.vastutalks.app.notifications.PushTokens.start(this)

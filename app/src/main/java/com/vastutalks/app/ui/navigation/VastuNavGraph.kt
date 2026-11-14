@@ -128,8 +128,13 @@ fun VastuNavGraph(
                         popUpTo(Routes.SIGN_IN) { inclusive = true }
                     }
                 },
-                onNavigateToCreateAccount = { navController.navigate(Routes.CREATE_ACCOUNT) }
+                onNavigateToCreateAccount = { navController.navigate(Routes.CREATE_ACCOUNT) },
+                onForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) }
             )
+        }
+
+        composable(Routes.FORGOT_PASSWORD) {
+            com.vastutalks.app.ui.screens.auth.ForgotPasswordScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.CREATE_ACCOUNT) {
@@ -166,6 +171,7 @@ fun VastuNavGraph(
                 },
                 onCallAgent = { navController.navigate(Routes.agentCalling(video = false)) },
                 onChatAgent = { navController.navigate(Routes.AGENT_CHAT) },
+                onScanHome = { navController.navigate(Routes.ROOM_SCAN) },
                 onCreatePost = { navController.navigate(Routes.CREATE_POST) },
                 onOpenPost = { navController.navigate(Routes.postDetail(it)) },
                 onChatExpert = { uid, name -> navController.navigate(Routes.conversation(uid, name)) },
@@ -183,7 +189,7 @@ fun VastuNavGraph(
             com.vastutalks.app.ui.screens.chat.ConversationScreen(
                 onBack = { navController.popBackStack() },
                 onCall = { uid, name ->
-                    navController.navigate(Routes.liveCalling(uid, name, CallType.AUDIO.name))
+                    navController.navigate(Routes.liveCalling(uid, name, CallType.VIDEO.name))
                 }
             )
         }
@@ -219,7 +225,8 @@ fun VastuNavGraph(
         composable(Routes.AGENT_CHAT) {
             AgentChatScreen(
                 onBack = { navController.popBackStack() },
-                onCall = { navController.navigate(Routes.agentCalling(video = false)) },
+                // "Talk" opens the voice screen straight away, as in the design.
+                onCall = { navController.navigate(Routes.agentInCall(video = false)) },
                 onScanRoom = { navController.navigate(Routes.ROOM_SCAN) },
                 onOpenReport = { navController.navigate(Routes.roomReport(it)) }
             )
@@ -251,7 +258,10 @@ fun VastuNavGraph(
             ProfileScreen(
                 onBack = { navController.popBackStack() },
                 onSignOut = ::signOut,
-                onOpenNotifications = { navController.navigate(Routes.NOTIFICATIONS) }
+                onOpenNotifications = { navController.navigate(Routes.NOTIFICATIONS) },
+                onOpenAgentChat = { navController.navigate(Routes.AGENT_CHAT) },
+                onOpenChat = { uid, name -> navController.navigate(Routes.conversation(uid, name)) },
+                onOpenPost = { navController.navigate(Routes.postDetail(it)) }
             )
         }
 
@@ -269,7 +279,7 @@ fun VastuNavGraph(
                 expertName = expertName,
                 onBack = { navController.popBackStack() },
                 onCall = {
-                    navController.navigate(Routes.liveCalling(expertUid, expertName, CallType.AUDIO.name))
+                    navController.navigate(Routes.liveCalling(expertUid, expertName, CallType.VIDEO.name))
                 },
                 onChat = { navController.navigate(Routes.conversation(expertUid, expertName)) }
             )
@@ -297,9 +307,10 @@ fun VastuNavGraph(
         ) { backStackEntry ->
             AgentInCallScreen(
                 startWithVideo = backStackEntry.arguments?.getBoolean("video") ?: false,
+                // Back to the chat with Anayra, where the conversation was saved.
                 onEndCall = {
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.HOME) { inclusive = true }
+                    if (!navController.popBackStack(Routes.AGENT_CHAT, inclusive = false)) {
+                        navController.navigate(Routes.AGENT_CHAT) { popUpTo(Routes.HOME) }
                     }
                 }
             )

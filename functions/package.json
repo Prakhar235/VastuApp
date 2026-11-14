@@ -2,7 +2,7 @@
   "name": "vastutalks-functions",
   "description": "Cloud Functions for VastuTalks (Agora token minting)",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

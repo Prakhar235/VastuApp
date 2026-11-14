@@ -1,5 +1,10 @@
 package com.vastutalks.app.ui.screens.call
 
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.ui.graphics.Brush
+import com.vastutalks.app.ui.components.AgentHeaderButton
+import com.vastutalks.app.ui.components.AiOrb
 import com.vastutalks.app.data.ai.tr
 import android.Manifest
 import android.content.pm.PackageManager
@@ -43,6 +48,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -70,7 +78,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -111,7 +118,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vastutalks.app.ui.components.CameraViewfinder
 import com.vastutalks.app.ui.components.DarkScreenStatusBar
 import com.vastutalks.app.ui.components.ViewfinderState
-import com.vastutalks.app.ui.components.rememberCameraHeading
+import com.vastutalks.app.ui.components.CameraHeadingSensor
+import com.vastutalks.app.ui.components.DirectionPickerDialog
+import com.vastutalks.app.ui.components.HeadingSensor
+import com.vastutalks.app.ui.components.rememberCameraPose
+import com.vastutalks.app.ui.components.rememberHeadingSensor
 import com.vastutalks.app.data.ai.CompassDirection
 import com.vastutalks.app.ui.components.PhotoReviewSheet
 import com.vastutalks.app.ui.components.ShareMediaActions
@@ -137,12 +148,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 private enum class CallPage { BOARD, CHAT }
 
 private enum class CallStatus(private val english: String, private val hindi: String, val color: Color) {
-    JOINING("Joining…", "जुड़ रही हैं…", CallTones.TextMuted),
-    LISTENING("Listening", "सुन रही हैं", OnlineGreen),
-    HEARING("Hearing you", "आपको सुन रही हैं", OnlineGreen),
-    THINKING("Thinking", "सोच रही हैं", VastuSaffron),
-    SPEAKING("Speaking", "बोल रही हैं", VastuPrimary),
-    MUTED("You're muted", "आप म्यूट हैं", CallTones.TextMuted),
+    JOINING("Joining…", "जुड़ रही हूँ…", Color.White.copy(alpha = 0.75f)),
+    LISTENING("Listening…", "सुन रही हूँ…", Color(0xFF86EFAC)),
+    HEARING("Listening…", "सुन रही हूँ…", Color(0xFF86EFAC)),
+    THINKING("Thinking…", "सोच रही हूँ…", Color(0xFFFFD93D)),
+    SPEAKING("Speaking…", "बोल रही हूँ…", Color.White.copy(alpha = 0.75f)),
+    MUTED("You are muted", "आप म्यूट हैं", Color.White.copy(alpha = 0.75f)),
     NO_MIC("Mic access needed", "माइक की अनुमति चाहिए", Danger),
     TEXT_ONLY("Chat to talk", "बात करने के लिए लिखें", CallTones.TextMuted);
 
@@ -209,7 +220,22 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
     // Switchable both ways during the call.
     var isVideo by remember { mutableStateOf(false) }
     val viewfinder = remember { ViewfinderState() }
-    val cameraHeading by rememberCameraHeading()
+    val cameraPose by rememberCameraPose()
+    val headingSensor = rememberHeadingSensor()
+    // Phones without a compass: the direction the caller picked (no gyroscope
+    // either), and whether the picker is open / has been offered this call.
+    var pickedFacing by remember { mutableStateOf<CompassDirection?>(null) }
+    var askDirection by remember { mutableStateOf(false) }
+    var offeredDirection by remember { mutableStateOf(false) }
+    val cameraFacing: PhotoFacing? = cameraPose?.let { PhotoFacing(it.heading, it.source) }
+        ?: pickedFacing?.let { PhotoFacing(it.degrees, PhotoFacing.Source.CALLER) }
+    // The first time video starts on such a phone, ask which way the camera faces.
+    LaunchedEffect(isVideo) {
+        if (isVideo && headingSensor != HeadingSensor.COMPASS && cameraFacing == null && !offeredDirection) {
+            offeredDirection = true
+            askDirection = true
+        }
+    }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) isVideo = true
         else android.widget.Toast.makeText(context, tr("Camera permission is needed for video.", "वीडियो के लिए कैमरा की अनुमति चाहिए।"), android.widget.Toast.LENGTH_SHORT).show()
@@ -304,7 +330,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         recorder.logLine("You", text)
         val view = if (isVideo) viewfinder.snapshot() else null
         if (view != null) {
-            val facing = cameraHeading?.let { PhotoFacing(it, PhotoFacing.Source.COMPASS) }
+            val facing = cameraFacing
             askAgent { agent.replyWithView(text, view, facing) }
         } else {
             askAgent { agent.reply(text) }
@@ -379,7 +405,7 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         scope.launch {
             agentTurnLock.withLock {
                 agent.attachRoomScan(scan.walls, scan.analysis)
-                postMedia(scan.walls.first().bitmap, tr("I scanned my ${scan.analysis.room.lowercase()} (${scan.walls.size} walls)", "मैंने अपना ${scan.analysis.room} स्कैन किया (${scan.walls.size} दीवारें)"))
+                postMedia(scan.walls.first().bitmap, tr("I scanned my ${scan.analysis.room.lowercase()} with a video", "मैंने वीडियो से अपना ${scan.analysis.room} स्कैन किया"))
                 val marked = scan.analysis.markedPhoto(scan.walls, scan.analysis.findings.firstOrNull()?.photo ?: 0)
                 val reportId = nextMessageId++
                 chatStore.saveReport(reportId, scan.walls, scan.analysis) // opens from the chat later
@@ -471,8 +497,29 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
         !agent.isConfigured -> CallStatus.TEXT_ONLY
         else -> CallStatus.LISTENING
     }
+    var showTranscript by remember { mutableStateOf(false) }
     DarkScreenStatusBar()
     Box(modifier = Modifier.fillMaxSize().agentScreenBackground()) {
+        if (!isVideo && !isScanning) {
+            TalkToAnayra(
+                status = status,
+                speaking = voice.isSpeaking,
+                elapsedSeconds = elapsedSeconds,
+                lastUser = chatMessages.lastOrNull { it.sender == ChatSender.USER && it.text.isNotBlank() }?.text,
+                lastAgent = chatMessages.lastOrNull { it.sender == ChatSender.AGENT && it.text.isNotBlank() }?.text,
+                isMuted = isMuted,
+                onToggleMute = {
+                    if (!hasMicPermission) micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    else isMuted = !isMuted
+                },
+                onInterrupt = { if (voice.isSpeaking) voice.stop() },
+                onEnd = {
+                    android.widget.Toast.makeText(context, tr("Conversation saved to chat", "बातचीत चैट में सेव हो गई"), android.widget.Toast.LENGTH_SHORT).show()
+                    onEndCall()
+                },
+                onToChat = onEndCall
+            )
+        } else
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
             AgentHeader(
                 subtitle = "${status.label} · ${if (isVideo) tr("Video", "वीडियो") else tr("Audio", "ऑडियो")} · " +
@@ -480,7 +527,15 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                 statusDot = { StatusDot(status) },
                 onScanRoom = ::startRoomScan,
                 isSpeaking = voice.isSpeaking
-            )
+            ) {
+                if (!isVideo) {
+                    AgentHeaderButton(
+                        if (showTranscript) Icons.Filled.GraphicEq else Icons.AutoMirrored.Outlined.Chat,
+                        if (showTranscript) tr("Show voice view", "आवाज़ वाला दृश्य") else tr("Show transcript", "बातचीत दिखाएँ"),
+                        onClick = { showTranscript = !showTranscript }
+                    )
+                }
+            }
 
             if (isVideo) {
                 Box(
@@ -492,9 +547,14 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                         .background(CallTones.Surface)
                 ) {
                     CameraViewfinder(viewfinder, Modifier.fillMaxSize())
+                    // Without a compass the chip is how the caller sets (or corrects) the direction.
+                    val canSetDirection = headingSensor != HeadingSensor.COMPASS
                     Text(
-                        cameraHeading?.let { tr("Camera facing ", "कैमरा की दिशा: ") + CompassDirection.of(it).localName }
-                            ?: tr("${AnanyaAgent.NAME} sees your camera", "${AnanyaAgent.NAME} आपका कैमरा देख रही हैं"),
+                        cameraFacing?.let {
+                            tr("Camera facing ", "कैमरा की दिशा: ") + it.direction.localName +
+                                if (canSetDirection) tr(" · tap to change", " · बदलें") else ""
+                        } ?: if (canSetDirection) tr("Tap to set camera direction", "कैमरे की दिशा चुनें")
+                        else tr("${AnanyaAgent.NAME} sees your camera", "${AnanyaAgent.NAME_HI} आपका कैमरा देख रही हैं"),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -502,9 +562,21 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                             .align(Alignment.TopStart)
                             .padding(10.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black.copy(alpha = 0.55f))
+                            .background(if (canSetDirection && cameraFacing == null) VastuPrimary else Color.Black.copy(alpha = 0.55f))
+                            .then(if (canSetDirection) Modifier.clickable { askDirection = true } else Modifier)
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
+                    if (askDirection) {
+                        DirectionPickerDialog(
+                            sensor = headingSensor,
+                            current = cameraFacing?.direction,
+                            onPick = {
+                                if (headingSensor == HeadingSensor.GYRO) CameraHeadingSensor.setDirection(it) else pickedFacing = it
+                                askDirection = false
+                            },
+                            onDismiss = { askDirection = false }
+                        )
+                    }
                 }
             }
 
@@ -539,7 +611,13 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                         onSend = { sendBoardToAgent() },
                         onClear = { clearBoard() }
                     )
-                    CallPage.CHAT -> AgentChatPage(
+                    CallPage.CHAT -> if (!isVideo && !showTranscript) OrbStage(
+                        status = status,
+                        speaking = voice.isSpeaking,
+                        lastUser = chatMessages.lastOrNull { it.sender == ChatSender.USER && it.text.isNotBlank() }?.text,
+                        lastAgent = chatMessages.lastOrNull { it.sender == ChatSender.AGENT && it.text.isNotBlank() }?.text,
+                        onOpenTranscript = { showTranscript = true }
+                    ) else AgentChatPage(
                         messages = chatMessages,
                         isAgentTyping = isAgentTyping,
                         agentName = AnanyaAgent.NAME,
@@ -603,6 +681,58 @@ fun AgentInCallScreen(startWithVideo: Boolean = false, onEndCall: () -> Unit) {
                     videoToReview = null
                 },
                 onSend = { question, facing -> sendVideo(video, question, facing) }
+            )
+        }
+    }
+}
+
+/** The voice view: Ananya's orb, what she's doing, and the latest line from each side. */
+@Composable
+private fun OrbStage(status: CallStatus, speaking: Boolean, lastUser: String?, lastAgent: String?, onOpenTranscript: () -> Unit) {
+    val pulse = rememberInfiniteTransition(label = "orb_pulse")
+    val scale by pulse.animateFloat(
+        initialValue = 0.92f, targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(if (speaking) 700 else 1800), RepeatMode.Reverse),
+        label = "orb_scale"
+    )
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 26.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(Modifier.size(210.dp), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .scale(scale)
+                    .clip(CircleShape)
+                    .background(Brush.radialGradient(listOf(Color(0x73C084FC), Color.Transparent)))
+            )
+            AiOrb(138.dp, ringWidth = 5.dp, iconSize = 54.dp, spinMillis = if (speaking) 2500 else 7000)
+        }
+        Text(AnanyaAgent.NAME, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp))
+        Text(status.label, color = status.color, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 118.dp)
+                .padding(top = 22.dp)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onOpenTranscript() },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (lastUser != null) {
+                Text("“$lastUser”", color = Color.White.copy(alpha = 0.6f), fontSize = 12.5.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            Text(
+                (lastAgent ?: tr("Ask anything about your home's Vastu.", "अपने घर के वास्तु के बारे में कुछ भी पूछें।")).replace("**", ""),
+                color = Color.White,
+                fontSize = 15.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 5,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
     }
@@ -913,6 +1043,87 @@ private fun CallControls(
                 Icon(Icons.Outlined.PhotoCamera, contentDescription = "Share a photo or video for Vastu advice", tint = CallTones.TextPrimary, modifier = Modifier.size(22.dp))
             }
             ShareMediaMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, actions = media)
+        }
+    }
+}
+
+/**
+ * The design's "Talk to Anayra" voice screen: time and free-minutes chips
+ * with the language toggle on top, the spinning orb (tap it to interrupt
+ * her), the latest line from each side, then mute, end and back-to-chat.
+ */
+@Composable
+private fun TalkToAnayra(
+    status: CallStatus,
+    speaking: Boolean,
+    elapsedSeconds: Int,
+    lastUser: String?,
+    lastAgent: String?,
+    isMuted: Boolean,
+    onToggleMute: () -> Unit,
+    onInterrupt: () -> Unit,
+    onEnd: () -> Unit,
+    onToChat: () -> Unit
+) {
+    val freeLeft = (10 * 60 - elapsedSeconds).coerceAtLeast(0)
+    fun mmss(x: Int) = "%02d:%02d".format(x / 60, x % 60)
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                mmss(elapsedSeconds), color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+            Text(
+                if (freeLeft > 0) tr("Free · ${mmss(freeLeft)} left", "मुफ़्त · ${mmss(freeLeft)} बाकी") else tr("₹5/min", "₹5/मिनट"),
+                color = if (freeLeft > 0) Color(0xFF86EFAC) else Color(0xFFFFD93D), fontSize = 10.5.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (freeLeft > 0) Color(0x2E22C55E) else Color(0x2EFFD93D))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+            Spacer(Modifier.weight(1f))
+            com.vastutalks.app.ui.components.DesignLangToggle(dark = true, height = 26.dp)
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onInterrupt)
+        ) {
+            OrbStage(status = status, speaking = speaking, lastUser = lastUser, lastAgent = lastAgent, onOpenTranscript = onInterrupt)
+        }
+        Column(
+            Modifier.fillMaxWidth().padding(start = 30.dp, end = 30.dp, bottom = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                if (speaking) tr("Tap the orb to interrupt", "बीच में बोलने के लिए ऑर्ब पर टैप करें") else tr("Speak naturally — in English or Hindi", "स्वाभाविक रूप से बोलें — हिंदी या अंग्रेज़ी में"),
+                color = Color.White.copy(alpha = 0.5f), fontSize = 10.5.sp
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape).background(if (isMuted) Color.White else Color.White.copy(alpha = 0.12f)).clickable(onClick = onToggleMute),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic, if (isMuted) "Unmute" else "Mute", tint = if (isMuted) Color(0xFF1A202C) else Color.White, modifier = Modifier.size(22.dp))
+                }
+                Box(
+                    Modifier.size(70.dp).shadow(14.dp, CircleShape, spotColor = Color(0xB3EF4444)).clip(CircleShape).background(Color(0xFFEF4444)).clickable(onClick = onEnd),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.CallEnd, "End", tint = Color.White, modifier = Modifier.size(26.dp))
+                }
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)).clickable(onClick = onToChat),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Keyboard, tr("Switch to chat", "चैट पर जाएँ"), tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+            }
         }
     }
 }

@@ -8,7 +8,9 @@ package com.vastutalks.app.data.model
  */
 object AnanyaAgent {
     const val ID = "ai-agent-ananya"
-    const val NAME = "Vastu Expert"
+    const val NAME = "Anayra"
+    /** Her name in Devanagari, for Hindi strings. */
+    const val NAME_HI = "अनायरा"
     const val SPECIALTY = "Residential Vastu"
     /** Seeds her pravatar.cc picture; changing it changes her face. */
     const val AVATAR_SEED = "demo-expert-ananya"

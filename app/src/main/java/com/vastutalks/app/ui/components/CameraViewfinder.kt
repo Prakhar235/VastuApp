@@ -32,6 +32,9 @@ class ViewfinderState {
     internal var imageCapture: ImageCapture? by mutableStateOf(null)
     internal var previewView: PreviewView? = null
 
+    /** Shows the front (selfie) camera instead of the back one. */
+    var useFrontCamera by mutableStateOf(false)
+
     /**
      * What the preview shows right now, as a bitmap — instant and silent,
      * unlike [takePhoto], but only at screen resolution. Null until the
@@ -72,7 +75,8 @@ class ViewfinderState {
 }
 
 /**
- * Live preview from the back camera, filling [modifier]. Needs the CAMERA
+ * Live preview from the back camera (or the front one, see
+ * [ViewfinderState.useFrontCamera]), filling [modifier]. Needs the CAMERA
  * permission to have been granted already.
  */
 @Composable
@@ -82,7 +86,7 @@ fun CameraViewfinder(state: ViewfinderState, modifier: Modifier = Modifier) {
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
     state.previewView = previewView
 
-    LaunchedEffect(lifecycleOwner) {
+    LaunchedEffect(lifecycleOwner, state.useFrontCamera) {
         val cameras = try {
             ProcessCameraProvider.awaitInstance(context)
         } catch (e: Exception) {
@@ -95,7 +99,8 @@ fun CameraViewfinder(state: ViewfinderState, modifier: Modifier = Modifier) {
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
             cameras.unbindAll()
-            cameras.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
+            val lens = if (state.useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+            cameras.bindToLifecycle(lifecycleOwner, lens, preview, capture)
             state.imageCapture = capture
             awaitCancellation()
         } catch (e: IllegalArgumentException) {

@@ -1,5 +1,17 @@
 package com.vastutalks.app.ui.screens.expert
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.ui.draw.shadow
+import com.vastutalks.app.ui.components.softWashBackground
+import com.vastutalks.app.ui.theme.PrimaryButtonGradient
+import com.vastutalks.app.ui.theme.TextPrimary
+import com.vastutalks.app.ui.theme.VastuCoral
+import com.vastutalks.app.ui.theme.VastuSun
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +28,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -58,7 +71,7 @@ fun RealExpertProfileScreen(
     expertUid: String,
     expertName: String,
     onBack: () -> Unit,
-    /** Starts as audio; either side can turn the camera on during the call. */
+    /** Starts a video call. */
     onCall: () -> Unit,
     onChat: () -> Unit
 ) {
@@ -79,116 +92,126 @@ fun RealExpertProfileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceLight)
+            .softWashBackground()
             .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(Color.White.copy(alpha = 0.8f))
                 .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .clickable { onBack() }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = Color(0xFF2B2B2B))
-            }
-            Text("Back", color = Color(0xFF2B2B2B), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = TextPrimary, modifier = Modifier.size(22.dp))
+            Text("Back", color = TextPrimary, fontWeight = FontWeight.Medium, fontSize = 12.5.sp)
         }
 
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(17.5.dp)
         ) {
             // Profile card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
+                    .shadow(18.dp, RoundedCornerShape(21.dp), spotColor = Color(0x33A855F7), ambientColor = Color(0x11A855F7))
+                    .clip(RoundedCornerShape(21.dp))
                     .background(Color.White)
-                    .padding(24.dp)
+                    .padding(21.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Box {
-                        ProfileAvatar(expert?.photo.orEmpty(), expertName, size = 112.dp)
-                        Box(
+                        ProfileAvatar(
+                            expert?.photo.orEmpty(), expertName, size = 98.dp,
                             modifier = Modifier
-                                .size(24.dp)
-                                .align(Alignment.BottomEnd)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                                .padding(3.dp)
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(expert?.let { expertStatusColor(it, now) } ?: TextSecondary))
+                                .shadow(16.dp, CircleShape)
+                                .border(4.dp, Color.White, CircleShape)
+                        )
+                        if (expert?.isPresentAt(now) == true) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.5.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .offset((-3.5).dp, (-3.5).dp)
+                                    .border(3.dp, Color(0x6610B981), CircleShape)
+                                    .padding(1.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .padding(3.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                            )
                         }
                     }
 
-                    Box(modifier = Modifier.height(16.dp))
-                    Text(expertName, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = Color(0xFF2B2B2B))
-                    Text(expert?.displaySpecialty ?: "", color = VastuPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    expert?.let {
-                        Text(expertStatusLabel(it, now), color = expertStatusColor(it, now), fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                    }
-
+                    Box(modifier = Modifier.height(14.dp))
+                    Text(expertName, fontWeight = FontWeight.Bold, fontSize = 21.sp, color = TextPrimary)
+                    Text(expert?.displaySpecialty ?: "", color = VastuPrimary, fontWeight = FontWeight.Medium, fontSize = 12.25.sp, modifier = Modifier.padding(top = 3.5.dp))
                     Box(modifier = Modifier.height(10.dp))
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(WalletGold.copy(alpha = 0.18f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(VastuSun.copy(alpha = 0.12f))
+                            .padding(horizontal = 14.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Star, contentDescription = null, tint = WalletGold, modifier = Modifier.size(15.dp))
-                            Text(" ${expert?.consultationsLabel ?: "New"}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF2B2B2B))
-                        }
+                        Icon(Icons.Filled.Star, contentDescription = null, tint = VastuSun, modifier = Modifier.size(14.dp))
+                        Text(" ${extras.ratingLabel}", fontWeight = FontWeight.Bold, fontSize = 12.25.sp, color = TextPrimary)
+                        Text(" • ${extras.reviewCount} reviews", fontSize = 10.5.sp, color = TextSecondary)
                     }
                 }
             }
 
-            Box(modifier = Modifier.height(16.dp))
+            Box(modifier = Modifier.height(17.5.dp))
 
             // Stat tiles
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile(icon = Icons.Filled.WorkspacePremium, label = "Experience", value = expert?.experienceYears?.takeIf { it > 0 }?.let { "$it yrs" } ?: "—", modifier = Modifier.weight(1f))
-                StatTile(icon = Icons.Filled.LocationOn, label = "Location", value = expert?.city?.ifBlank { null } ?: "—", modifier = Modifier.weight(1f))
-                if (CallPricing.PAID_CALLS) {
-                    StatTile(icon = Icons.Outlined.AutoAwesome, label = "Rate", value = "₹${extras.pricePerSession}", modifier = Modifier.weight(1f))
-                } else {
-                    StatTile(icon = Icons.Outlined.AutoAwesome, label = "Consultations", value = "${expert?.consultationsCompleted ?: 0}", modifier = Modifier.weight(1f))
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.5.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile(icon = Icons.Outlined.WorkspacePremium, tint = VastuPrimary, label = "Experience", value = expert?.experienceYears?.takeIf { it > 0 }?.let { "$it yrs" } ?: "—", modifier = Modifier.weight(1f))
+                StatTile(icon = Icons.Outlined.LocationOn, tint = VastuCoral, label = "Location", value = expert?.city?.ifBlank { null } ?: "—", modifier = Modifier.weight(1f))
+                StatTile(
+                    icon = Icons.Outlined.AutoAwesome, tint = VastuSun, label = "Rate",
+                    value = if (CallPricing.PAID_CALLS) com.vastutalks.app.data.model.SampleShop.rupees(extras.pricePerSession) else "Free",
+                    modifier = Modifier.weight(1f)
+                )
             }
 
-            Box(modifier = Modifier.height(16.dp))
+            Box(modifier = Modifier.height(17.5.dp))
 
             // About
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .shadow(18.dp, RoundedCornerShape(21.dp), spotColor = Color(0x33A855F7), ambientColor = Color(0x11A855F7))
+                    .clip(RoundedCornerShape(21.dp))
                     .background(Color.White)
-                    .padding(20.dp)
+                    .padding(17.5.dp)
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = WalletGold, modifier = Modifier.size(18.dp))
-                        Text("  About Expert", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF2B2B2B))
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = VastuSun, modifier = Modifier.size(18.dp))
+                        Text("  About Expert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
                     }
                     Box(modifier = Modifier.height(10.dp))
-                    Text(expert?.displayBio ?: "", fontSize = 14.sp, color = TextSecondary, lineHeight = 21.sp)
+                    Text(expert?.displayBio ?: "", fontSize = 12.25.sp, color = TextSecondary, lineHeight = 20.sp)
                 }
             }
         }
-
-        Box(modifier = Modifier.fillMaxSize().weight(1f))
 
         // Bottom actions
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .background(Color.White.copy(alpha = 0.8f))
+                .padding(17.5.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.5.dp)
         ) {
             // Chat and calls both work while the expert is offline.
-            CallButton(Icons.AutoMirrored.Outlined.Chat, "Chat", filled = true, enabled = true, onClick = onChat, modifier = Modifier.weight(1f))
-            CallButton(Icons.Filled.Call, "Call", filled = false, enabled = canCall, onClick = onCall, modifier = Modifier.weight(1f))
+            CallButton(Icons.AutoMirrored.Outlined.Chat, "Chat Now", filled = true, enabled = true, onClick = onChat, modifier = Modifier.weight(1f))
+            CallButton(Icons.Outlined.Videocam, "Video Call", filled = false, enabled = canCall, onClick = onCall, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -205,33 +228,40 @@ private fun CallButton(
     val content = if (!enabled) TextSecondary else if (filled) Color.White else VastuPrimary
     Box(
         modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (!enabled) Color(0xFFE6E4EC) else if (filled) VastuPrimary else Color.White)
+            .height(50.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .then(
+                when {
+                    !enabled -> Modifier.background(Color(0xFFE6E4EC))
+                    filled -> Modifier.background(PrimaryButtonGradient)
+                    else -> Modifier.background(Color.White).border(2.dp, VastuPrimary, RoundedCornerShape(14.dp))
+                }
+            )
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-            Text("  $label", color = content, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("  $label", color = content, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         }
     }
 }
 
 @Composable
-private fun StatTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatTile(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, label: String, value: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .shadow(8.dp, RoundedCornerShape(14.dp), spotColor = Color(0x22A855F7), ambientColor = Color(0x0AA855F7))
+            .clip(RoundedCornerShape(14.dp))
             .background(Color.White)
-            .padding(vertical = 16.dp),
+            .padding(14.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
-            Box(modifier = Modifier.height(6.dp))
-            Text(label, fontSize = 12.sp, color = TextSecondary)
-            Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+            Box(modifier = Modifier.height(7.dp))
+            Text(label, fontSize = 10.5.sp, color = TextSecondary)
+            Text(value, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
 }

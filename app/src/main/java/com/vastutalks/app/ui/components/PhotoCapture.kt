@@ -250,12 +250,12 @@ internal fun CaptureReviewSheet(
     var question by remember { mutableStateOf("") }
     val images = remember(frames) { frames.map { it.asImageBitmap() } }
     var shown by remember(frames) { mutableIntStateOf(0) }
-    val liveHeading by rememberCameraHeading()
+    val livePose by rememberCameraPose()
     var picked by remember(frames) { mutableStateOf<CompassDirection?>(null) }
     val facing = when {
         picked != null -> PhotoFacing(picked!!.degrees, PhotoFacing.Source.CALLER)
         exifHeading != null -> PhotoFacing(exifHeading, PhotoFacing.Source.PHOTO)
-        liveHeading != null -> PhotoFacing(liveHeading!!, PhotoFacing.Source.COMPASS)
+        livePose != null -> PhotoFacing(livePose!!.heading, livePose!!.source)
         else -> null
     }
     fun send() = onSend(question.trim(), facing)
@@ -419,6 +419,9 @@ private fun FacingPicker(facing: PhotoFacing?, isVideo: Boolean, onPick: (Compas
                 PhotoFacing.Source.COMPASS ->
                     if (isVideo) tr("Live compass — point your phone where you started recording, or tap a direction", "लाइव कम्पास — फ़ोन उस ओर करें जहाँ से रिकॉर्डिंग शुरू की, या दिशा टैप करें")
                     else tr("Live compass — point your phone the way you took the photo, or tap a direction", "लाइव कम्पास — फ़ोन उस ओर करें जिधर फ़ोटो ली, या दिशा टैप करें")
+                PhotoFacing.Source.TRACKED ->
+                    if (isVideo) tr("Tracked from the direction you set — point your phone where you started recording, or tap a direction", "आपकी चुनी दिशा से — फ़ोन उस ओर करें जहाँ से रिकॉर्डिंग शुरू की, या दिशा टैप करें")
+                    else tr("Tracked from the direction you set — point your phone the way you took the photo, or tap a direction", "आपकी चुनी दिशा से — फ़ोन उस ओर करें जिधर फ़ोटो ली, या दिशा टैप करें")
                 PhotoFacing.Source.CALLER -> tr("Set by you · tap it again to use the compass", "आपने चुना · कम्पास के लिए फिर टैप करें")
                 null -> tr("No compass on this phone — tap a direction", "इस फ़ोन में कम्पास नहीं — दिशा टैप करें")
             },

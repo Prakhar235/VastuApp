@@ -12,7 +12,7 @@ package com.vastutalks.app.data.call
  * walkthrough.
  */
 object AgoraConfig {
-    const val APP_ID: String = "6245c3b5f0ce469aa17aeae3377901a9"
+    const val APP_ID: String = "2fa4680d2f2c48e2831d8bece8cc6e4a"
 
     /**
      * Empty now that the generateAgoraToken Cloud Function is deployed —

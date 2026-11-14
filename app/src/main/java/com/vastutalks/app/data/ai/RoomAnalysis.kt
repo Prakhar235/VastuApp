@@ -3,8 +3,16 @@ package com.vastutalks.app.data.ai
 import android.graphics.Bitmap
 import org.json.JSONObject
 
-/** One wall's photo from a room scan, and which way the camera faced when it was taken. */
-class WallPhoto(val bitmap: Bitmap, val facing: PhotoFacing)
+/**
+ * One frame of a home scan video (or an uploaded photo), and which way the
+ * camera faced at that moment; null when the phone couldn't tell (no
+ * compass, or a video picked from the gallery).
+ */
+class WallPhoto(val bitmap: Bitmap, val facing: PhotoFacing?) {
+    /** What the model is told about this frame's direction. */
+    fun describeForAgent(): String =
+        facing?.describeForAgent() ?: "The camera direction for this frame is unknown; work it out from the other frames if you can."
+}
 
 /** The nine Vastu zones of a room, as a 3×3 grid with North at the top. */
 enum class RoomZone(val row: Int, val col: Int, val english: String, val hindi: String) {
@@ -117,14 +125,18 @@ data class RoomAnalysis(
         /** What the model is asked to return for a scan (see VastuAgent.analyzeRoom). */
         fun prompt(): String = """
             You are ${com.vastutalks.app.data.model.AnanyaAgent.NAME}, a practical Residential Vastu consultant in the
-            VastuTalks app. The user photographed the walls of ONE room, guided by the phone's compass. Each photo
-            has a faint yellow grid numbered along the top edge (x, 0 to 100, left to right) and the left edge
-            (y, 0 to 100, top to bottom); the user sees it without the grid.
+            VastuTalks app. The user recorded a video walking slowly through their home, starting at the main door,
+            and you get frames taken from it in order ("photo 0" is the first), each with the way the camera
+            faced at that moment when the phone could tell. It may show one room or several. Each photo has a
+            faint yellow grid numbered along the top edge (x, 0 to 100, left to right) and the left edge (y, 0 to
+            100, top to bottom); the user sees it without the grid. Frames often overlap, so report each object
+            once, in the frame where it is seen best.
 
-            Do a full Vastu read of the room: work out what room it is; find every Vastu-relevant thing you can
+            Do a full Vastu read of the space: work out which room or rooms it shows; find every Vastu-relevant thing you can
             really see (doors, windows, bed, stove, sink, mirror, desk, safe, puja shelf or idols, TV and
             electronics, heavy furniture, plants, water, clocks, pictures, colours, clutter, beams, light); work out
-            which of the nine zones of the room each is in from the camera directions given; and judge each one.
+            which of the nine zones each is in from the camera directions given (zones of the room it is in, or of
+            the whole home when the video covers several rooms); and judge each one.
             Never invent an object you can't see. At most 8 findings, problems first (major, then minor), then
             what is already good.
 
@@ -151,7 +163,7 @@ data class RoomAnalysis(
                 }
               ]
             }
-            score: 0-100 for the whole room. verdict: 1-2 words. summary: one short sentence counting the findings.
+            room: what the video shows, e.g. "Living room" or "Home · 3 rooms". score: 0-100 for the whole space. verdict: 1-2 words. summary: one short sentence counting the findings.
             title: 3-6 words naming the thing and where it is. object: 1-2 words. severity: "major", "minor" or
             "good". photo: index of the photo it is in (0 = first). mark: where it is in that photo, in percent of
             the image — "rect" with x, y, w, h for big things, or "circle" with x, y and r (r is percent of the

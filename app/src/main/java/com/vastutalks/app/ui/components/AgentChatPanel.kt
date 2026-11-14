@@ -1,5 +1,9 @@
 package com.vastutalks.app.ui.components
 
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.draw.shadow
+import com.vastutalks.app.ui.theme.PrimaryButtonGradient
 import com.vastutalks.app.data.ai.tr
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -75,6 +79,48 @@ data class AgentChatMessage(
     val hasReport: Boolean = false
 )
 
+/**
+ * Colours for the agent chat surfaces. The call uses the dark [DarkAgentTones];
+ * the text chat provides [LightAgentTones] through [LocalAgentTones].
+ */
+data class AgentTones(
+    val surface: Color,
+    val surfaceRaised: Color,
+    val hairline: Color,
+    val textPrimary: Color,
+    val textMuted: Color,
+    val agentBubble: Color,
+    val agentText: Color,
+    val highlight: Color,
+    val isLight: Boolean
+)
+
+val DarkAgentTones = AgentTones(
+    surface = Color(0xFF1C1927),
+    surfaceRaised = Color(0xFF262236),
+    hairline = Color.White.copy(alpha = 0.08f),
+    textPrimary = Color(0xFFF4F2FA),
+    textMuted = Color(0xFF9D98B3),
+    agentBubble = Color(0xFF1C1927),
+    agentText = Color.White,
+    highlight = VastuSaffron,
+    isLight = false
+)
+
+val LightAgentTones = AgentTones(
+    surface = Color(0xFFF7FAFC),
+    surfaceRaised = Color(0xFFF1EFF8),
+    hairline = Color(0xFFEFEDF8),
+    textPrimary = Color(0xFF1A202C),
+    textMuted = Color(0xFF718096),
+    agentBubble = Color.White,
+    agentText = Color(0xFF1A202C),
+    highlight = VastuPrimary,
+    isLight = true
+)
+
+val LocalAgentTones = staticCompositionLocalOf { DarkAgentTones }
+
 /** Shared tones for the agent call's dark surfaces. */
 object CallTones {
     val Ink = Color(0xFF110F18)
@@ -102,18 +148,18 @@ fun ShareMediaMenu(expanded: Boolean, onDismiss: () -> Unit, actions: ShareMedia
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        containerColor = CallTones.SurfaceRaised,
+        containerColor = LocalAgentTones.current.surfaceRaised,
         shape = RoundedCornerShape(16.dp)
     ) {
         listOfNotNull(
-            actions.scanRoom?.let { Triple(tr("Scan a whole room (wall by wall)", "पूरा कमरा स्कैन करें (हर दीवार)"), Icons.Outlined.Explore, it) },
+            actions.scanRoom?.let { Triple(tr("Scan home (video walk-through)", "घर स्कैन करें (वीडियो)"), Icons.Outlined.Explore, it) },
             Triple(tr("Take a photo", "फ़ोटो खींचें"), Icons.Outlined.PhotoCamera, actions.takePhoto),
             Triple(tr("Upload a photo from gallery", "गैलरी से फ़ोटो अपलोड करें"), Icons.Outlined.PhotoLibrary, actions.pickPhoto),
             Triple(tr("Record a video (up to 30 s)", "वीडियो रिकॉर्ड करें (30 सेकंड तक)"), Icons.Outlined.Videocam, actions.recordVideo)
         ).forEach { (label, icon, action) ->
             DropdownMenuItem(
-                text = { Text(label, color = CallTones.TextPrimary) },
-                leadingIcon = { Icon(icon, contentDescription = null, tint = CallTones.TextPrimary) },
+                text = { Text(label, color = LocalAgentTones.current.textPrimary) },
+                leadingIcon = { Icon(icon, contentDescription = null, tint = LocalAgentTones.current.textPrimary) },
                 onClick = { onDismiss(); action() }
             )
         }
@@ -139,6 +185,9 @@ fun AgentChatPage(
     media: ShareMediaActions? = null,
     /** Opens the full room report saved with [AgentChatMessage.hasReport]. */
     onOpenReport: (AgentChatMessage) -> Unit = {},
+    /** One-tap questions shown above the input box. */
+    quickPrompts: List<String> = emptyList(),
+    onQuickPrompt: (String) -> Unit = {},
     emptyHint: String = tr("Everything you and $agentName say will show up here.", "आप और $agentName जो भी कहेंगे, वह यहाँ दिखेगा।")
 ) {
     val listState = rememberLazyListState()
@@ -159,7 +208,7 @@ fun AgentChatPage(
                 item {
                     Text(
                         emptyHint,
-                        color = CallTones.TextMuted,
+                        color = LocalAgentTones.current.textMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -174,13 +223,35 @@ fun AgentChatPage(
             }
         }
 
+        if (quickPrompts.isNotEmpty()) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                items(quickPrompts) { prompt ->
+                    Text(
+                        prompt,
+                        color = VastuPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (LocalAgentTones.current.isLight) Color(0xFFFAF5FF) else LocalAgentTones.current.surface)
+                            .border(1.dp, if (LocalAgentTones.current.isLight) Color(0xFFE9D5FF) else LocalAgentTones.current.hairline, RoundedCornerShape(999.dp))
+                            .clickable { onQuickPrompt(prompt) }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
                 .clip(RoundedCornerShape(26.dp))
-                .background(CallTones.Surface)
-                .border(1.dp, CallTones.Hairline, RoundedCornerShape(26.dp))
+                .background(LocalAgentTones.current.surface)
+                .border(1.dp, LocalAgentTones.current.hairline, RoundedCornerShape(26.dp))
                 .padding(start = if (media != null) 6.dp else 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -192,14 +263,14 @@ fun AgentChatPage(
                             .padding(end = 8.dp)
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(CallTones.SurfaceRaised)
+                            .background(LocalAgentTones.current.surfaceRaised)
                             .clickable { menuOpen = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Outlined.AddPhotoAlternate,
                             contentDescription = "Share a photo or video",
-                            tint = CallTones.TextPrimary,
+                            tint = LocalAgentTones.current.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -208,12 +279,12 @@ fun AgentChatPage(
             }
             Box(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                 if (inputText.isEmpty()) {
-                    Text(tr("Ask $agentName…", "$agentName से पूछें…"), color = CallTones.TextMuted, fontSize = 14.sp)
+                    Text(tr("Ask $agentName…", "$agentName से पूछें…"), color = LocalAgentTones.current.textMuted, fontSize = 14.sp)
                 }
                 BasicTextField(
                     value = inputText,
                     onValueChange = onInputChange,
-                    textStyle = TextStyle(color = CallTones.TextPrimary, fontSize = 14.sp),
+                    textStyle = TextStyle(color = LocalAgentTones.current.textPrimary, fontSize = 14.sp, fontFamily = com.vastutalks.app.ui.theme.Poppins),
                     cursorBrush = SolidColor(VastuPrimary),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { onSend() }),
@@ -227,14 +298,14 @@ fun AgentChatPage(
                     .padding(start = 8.dp)
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (canSend) VastuPrimary else CallTones.SurfaceRaised)
+                    .then(if (canSend) Modifier.background(PrimaryButtonGradient) else Modifier.background(LocalAgentTones.current.surfaceRaised))
                     .clickable(enabled = canSend) { onSend() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
-                    tint = if (canSend) Color.White else CallTones.TextMuted,
+                    tint = if (canSend) Color.White else LocalAgentTones.current.textMuted,
                     modifier = Modifier.size(17.dp)
                 )
             }
@@ -245,23 +316,23 @@ fun AgentChatPage(
 @Composable
 private fun AgentMessage(message: AgentChatMessage, agentName: String, avatarSeed: String, isTyping: Boolean = false, onOpenReport: () -> Unit = {}) {
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-        AsyncImage(
-            model = "https://i.pravatar.cc/300?u=$avatarSeed",
-            contentDescription = null,
-            modifier = Modifier.size(30.dp).clip(CircleShape).background(CallTones.SurfaceRaised)
-        )
+        AiOrb(30.dp, ringWidth = 2.dp, iconSize = 13.dp, animated = false)
         Column(modifier = Modifier.padding(start = 10.dp).widthIn(max = 290.dp)) {
-            Text(agentName, color = CallTones.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(agentName, color = LocalAgentTones.current.textMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             Box(
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                    .background(CallTones.Surface)
-                    .border(1.dp, CallTones.Hairline, RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
+                    .then(
+                        if (LocalAgentTones.current.isLight) Modifier.shadow(8.dp, RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp), ambientColor = Color(0x1AA855F7), spotColor = Color(0x33A855F7))
+                        else Modifier
+                    )
+                    .background(LocalAgentTones.current.agentBubble, RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
+                    .border(1.dp, LocalAgentTones.current.hairline, RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 if (isTyping) {
-                    Text(tr("Typing…", "लिख रही हैं…"), color = CallTones.TextMuted, fontSize = 14.sp)
+                    Text(tr("Typing…", "लिख रही हैं…"), color = LocalAgentTones.current.textMuted, fontSize = 14.sp)
                 } else {
                     MessageBody(message)
                 }
@@ -291,7 +362,7 @@ private fun UserMessage(message: AgentChatMessage) {
             modifier = Modifier
                 .widthIn(max = 290.dp)
                 .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 4.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                .background(VastuPrimary)
+                .background(PrimaryButtonGradient)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             MessageBody(message)
@@ -300,7 +371,7 @@ private fun UserMessage(message: AgentChatMessage) {
 }
 
 @Composable
-private fun MessageBody(message: AgentChatMessage) {
+internal fun MessageBody(message: AgentChatMessage, textSize: androidx.compose.ui.unit.TextUnit = 14.sp) {
     var fullScreen by remember { mutableStateOf(false) }
     Column {
         message.image?.let {
@@ -321,9 +392,9 @@ private fun MessageBody(message: AgentChatMessage) {
         }
         if (message.text.isNotBlank()) {
             Text(
-                if (message.sender == ChatSender.AGENT) highlightSuggestions(message.text) else AnnotatedString(message.text),
-                color = Color.White,
-                fontSize = 14.sp,
+                if (message.sender == ChatSender.AGENT) highlightSuggestions(message.text, LocalAgentTones.current.highlight) else AnnotatedString(message.text),
+                color = if (message.sender == ChatSender.AGENT) LocalAgentTones.current.agentText else Color.White,
+                fontSize = textSize,
                 lineHeight = 20.sp
             )
         }
@@ -336,7 +407,7 @@ private fun MessageBody(message: AgentChatMessage) {
  * the advice stands out from the explanation. An unclosed ** is shown
  * as is.
  */
-private fun highlightSuggestions(text: String): AnnotatedString = buildAnnotatedString {
+private fun highlightSuggestions(text: String, color: Color): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < text.length) {
         val start = text.indexOf("**", i)
@@ -346,7 +417,7 @@ private fun highlightSuggestions(text: String): AnnotatedString = buildAnnotated
             break
         }
         append(text.substring(i, start))
-        withStyle(SpanStyle(color = VastuSaffron, fontWeight = FontWeight.Bold, background = VastuSaffron.copy(alpha = 0.14f))) {
+        withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold, background = color.copy(alpha = 0.1f))) {
             append(text.substring(start + 2, end))
         }
         i = end + 2

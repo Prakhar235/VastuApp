@@ -1,5 +1,6 @@
 package com.vastutalks.app.ui.screens.call
 
+import androidx.compose.foundation.border
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,6 +20,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Chat
@@ -97,7 +103,7 @@ fun LiveInCallScreen(
     val expertUid = remember(channelName) { channelName.removePrefix("expert-") }
     val extras = remember(expertUid) { expertDisplayExtrasFor(expertUid) }
     val ratePerMinute = extras.pricePerSession / 60.0
-    val startingWalletBalance = 2450.0
+    val startingWalletBalance = com.vastutalks.app.data.model.SampleShop.balance.toDouble()
 
     // channelName encodes the expert's own uid ("expert-<uid>"), so
     // comparing it to the signed-in user tells us which side of the
@@ -203,162 +209,146 @@ fun LiveInCallScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(VastuPrimary, VastuPrimaryDark)))
+            .background(com.vastutalks.app.ui.theme.ExpertCallGradient)
     ) {
-        if (showRealRemoteVideo) {
-            RemoteVideoView(uid = remoteUid!!, modifier = Modifier.fillMaxSize())
-        }
-
         Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
-            // Top pills: timer, live cost, wallet balance.
+            // Top bar: timer, live cost, wallet balance (sample wallet; calls are free for now).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.3f))
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 21.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TopPill(text = timerLabel)
-                TopPill(text = if (isVideoOn || isRemoteVideoOn) "Video call" else "Audio call")
-                if (CallPricing.PAID_CALLS) {
-                    TopPill(text = "Cost: ₹%.2f".format(cost))
-                    Box(modifier = Modifier.weight(1f))
-                    TopPill(text = "₹%.2f".format(remainingBalance))
+                TopPill {
+                    Icon(Icons.Outlined.Schedule, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text(" " + "%02d:%02d".format(minutes, seconds), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                Box(Modifier.size(8.dp))
+                TopPill {
+                    Text("Cost: ", color = Color.White.copy(alpha = 0.8f), fontSize = 10.5.sp)
+                    Text(if (CallPricing.PAID_CALLS) "₹%.2f".format(cost) else "Free", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.25.sp)
+                }
+                Box(modifier = Modifier.weight(1f))
+                TopPill {
+                    Icon(Icons.Outlined.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text(
+                        " " + if (CallPricing.PAID_CALLS) "₹%.2f".format(remainingBalance) else "₹%.2f".format(com.vastutalks.app.data.model.SampleShop.balance.toDouble()),
+                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp
+                    )
                 }
             }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.1f)))
 
-            if (!showRealRemoteVideo) {
-                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(140.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ProfileAvatar(peerPhoto, peerName, size = 124.dp)
-                        }
-                        Box(modifier = Modifier.size(16.dp))
-                        if (isVideoOn && remoteUid == null) {
-                            Text(
-                                text = "Connecting you with ${peerName.substringBefore(" ")}…",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 13.sp, textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 32.dp)
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.Black.copy(alpha = 0.25f))
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(peerName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(peerSubtitle, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+            // The other person: their video, or their photo, on a rounded stage.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(start = 21.dp, end = 21.dp, top = 14.dp, bottom = 14.dp)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .shadow(24.dp, RoundedCornerShape(21.dp))
+                        .clip(RoundedCornerShape(21.dp))
+                        .background(Brush.linearGradient(listOf(Color(0x4D6C5CE7), Color(0x80312E81)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (showRealRemoteVideo) {
+                        RemoteVideoView(uid = remoteUid!!, modifier = Modifier.fillMaxSize())
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier.size(134.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ProfileAvatar(peerPhoto, peerName, size = 126.dp)
+                            }
+                            if (remoteUid == null) {
+                                Text(
+                                    text = "Connecting...",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 12.25.sp, textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(top = 14.dp)
+                                )
                             }
                         }
                     }
                 }
-            } else {
-                Box(modifier = Modifier.weight(1f))
-            }
-
-            // Local camera preview thumbnail, top-right-ish, while this side sends video.
-            // Hidden under the chat: it draws above everything (see LocalVideoView).
-            if (isVideoOn && !showChat) {
-                Box(
-                    modifier = Modifier
-                        .padding(end = 20.dp, top = 4.dp, bottom = 12.dp)
-                        .align(Alignment.End)
-                        .size(width = 90.dp, height = 120.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black.copy(alpha = 0.35f)),
-                    contentAlignment = Alignment.Center
+                // Your camera (tap to switch front/back). Hidden under the chat: it draws above everything (see LocalVideoView).
+                if (!showChat) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 21.dp, end = 10.5.dp)
+                            .size(width = 98.dp, height = 126.dp)
+                            .shadow(20.dp, RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (isVideoOn) Color.Black.copy(alpha = 0.6f) else Color(0xFF111827))
+                            .border(2.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+                            .clickable(enabled = isVideoOn, onClickLabel = "Switch camera") { AgoraCallManager.switchCamera() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isVideoOn) LocalVideoView(modifier = Modifier.fillMaxSize())
+                        else Icon(Icons.Filled.VideocamOff, contentDescription = "Camera off", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(24.dp))
+                    }
+                }
+                Column(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 10.5.dp, bottom = 17.5.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.5.dp)
                 ) {
-                    LocalVideoView(modifier = Modifier.fillMaxSize())
+                    Text(peerName, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    Text(peerSubtitle, color = Color.White.copy(alpha = 0.7f), fontSize = 10.5.sp, modifier = Modifier.padding(top = 1.75.dp))
                 }
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 21.dp),
+                horizontalArrangement = Arrangement.spacedBy(17.5.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 LiveControlButton(
                     icon = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                    isActive = isMuted,
+                    alert = isMuted,
                     description = if (isMuted) "Unmute" else "Mute",
                     onClick = { isMuted = !isMuted; AgoraCallManager.muteLocalAudio(isMuted) }
                 )
                 Box(
-                    modifier = Modifier.size(64.dp).clip(CircleShape).background(Danger)
+                    modifier = Modifier
+                        .size(68.dp)
+                        .shadow(16.dp, CircleShape, spotColor = Color(0x66F56565))
+                        .clip(CircleShape)
+                        .background(com.vastutalks.app.ui.theme.EndCallRed)
                         .clickable { endCall() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.CallEnd, contentDescription = "End call", tint = Color.White)
+                    Icon(Icons.Filled.CallEnd, contentDescription = "End call", tint = Color.White, modifier = Modifier.size(26.dp))
                 }
                 LiveControlButton(
                     icon = if (isVideoOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                    isActive = isVideoOn,
-                    description = if (isVideoOn) "Switch to audio only" else "Switch to video",
+                    alert = !isVideoOn,
+                    description = if (isVideoOn) "Turn camera off" else "Turn camera on",
                     onClick = ::toggleVideo
                 )
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
+                modifier = Modifier.fillMaxWidth().padding(top = 17.5.dp, bottom = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
             ) {
-                LiveControlButton(
-                    icon = Icons.Filled.VolumeUp,
-                    isActive = isSpeakerOn,
-                    description = if (isSpeakerOn) "Speaker off" else "Speaker on",
-                    onClick = { isSpeakerOn = !isSpeakerOn }
-                )
-                if (isVideoOn) {
-                    LiveControlButton(
-                        icon = Icons.Filled.Cameraswitch,
-                        isActive = false,
-                        description = "Switch camera",
-                        onClick = { AgoraCallManager.switchCamera() }
-                    )
+                SmallCallButton(Icons.Filled.Chat, "Chat") {
+                    if (peerUid != null) showChat = true
+                    else android.widget.Toast.makeText(context, "Chat is still loading — try again in a moment.", android.widget.Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .clickable {
-                            if (peerUid != null) showChat = true
-                            else android.widget.Toast.makeText(context, "Chat is still loading — try again in a moment.", android.widget.Toast.LENGTH_SHORT).show()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Chat, contentDescription = "Chat", tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-
-                if (isExpertOnThisDevice) {
-                    Box(modifier = Modifier.padding(start = 16.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable { showDrawingCanvas = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.Draw, contentDescription = "Sketch", tint = Color.White, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
+                SmallCallButton(if (isSpeakerOn) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff, if (isSpeakerOn) "Speaker off" else "Speaker on") { isSpeakerOn = !isSpeakerOn }
+                if (isExpertOnThisDevice) SmallCallButton(Icons.Filled.Draw, "Sketch") { showDrawingCanvas = true }
             }
         }
 
@@ -379,35 +369,51 @@ fun LiveInCallScreen(
 }
 
 @Composable
-private fun TopPill(text: String) {
-    Box(
+private fun TopPill(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.18f))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Text(text, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-    }
+            .background(Color.White.copy(alpha = 0.2f))
+            .padding(horizontal = 12.dp, vertical = 8.75.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
 }
 
+/** Mute / camera: frosted when normal, red when off (as in the design). */
 @Composable
 private fun LiveControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    isActive: Boolean,
+    alert: Boolean,
     description: String? = null,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(57.dp)
             .clip(CircleShape)
-            .background(if (isActive) Color.White else Color.White.copy(alpha = 0.15f))
+            .background(if (alert) Color(0xFFF56565) else Color.White.copy(alpha = 0.2f))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = description, tint = if (isActive) VastuPrimaryDark else Color.White, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(22.dp))
     }
 }
+
+@Composable
+private fun SmallCallButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(39.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.15f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(18.dp))
+    }
+}
+
 /**
  * The chat with the other person, over the call (which keeps going
  * underneath). Back or the arrow returns to the call.

@@ -15,8 +15,8 @@ android {
         applicationId = "com.vastutalks.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 5
+        versionName = "1.4"
 
         // Demo-call AI agent key, read from local.properties (gitignored).
         // NOTE: anything in BuildConfig ships inside the APK and can be

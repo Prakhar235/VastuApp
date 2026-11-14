@@ -22,13 +22,18 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.vastutalks.app.ui.theme.InputFill
 import com.vastutalks.app.ui.theme.TextHint
+import com.vastutalks.app.ui.theme.TextPrimary
+import com.vastutalks.app.ui.theme.VastuPrimary
+import com.vastutalks.app.ui.theme.Poppins
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun VastuTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    leadingIcon: ImageVector,
+    leadingIcon: ImageVector?,
     modifier: Modifier = Modifier,
     isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
@@ -40,10 +45,10 @@ fun VastuTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = if (minLines > 1) modifier.fillMaxWidth() else modifier.fillMaxWidth().height(56.dp),
-        placeholder = { Text(placeholder, color = TextHint) },
-        leadingIcon = {
-            Icon(leadingIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        modifier = (if (minLines > 1) modifier.fillMaxWidth() else modifier.fillMaxWidth().height(52.dp)).keepAboveKeyboard(),
+        placeholder = { Text(placeholder, color = TextHint, fontSize = 14.sp) },
+        leadingIcon = if (leadingIcon == null) null else {
+            { Icon(leadingIcon, contentDescription = null, tint = TextHint, modifier = Modifier.size(18.dp)) }
         },
         trailingIcon = {
             if (isPassword && onTogglePasswordVisibility != null) {
@@ -59,16 +64,17 @@ fun VastuTextField(
         visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
         singleLine = minLines <= 1,
+        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = Poppins, fontSize = 14.sp),
         minLines = minLines,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
             // Explicit, so the text stays readable whatever the phone's theme.
-            focusedTextColor = Color(0xFF2B2B2B),
-            unfocusedTextColor = Color(0xFF2B2B2B),
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
             unfocusedContainerColor = InputFill,
             focusedContainerColor = InputFill,
             unfocusedBorderColor = InputFill,
-            focusedBorderColor = MaterialTheme.colorScheme.primary
+            focusedBorderColor = VastuPrimary.copy(alpha = 0.4f)
         )
     )
 }

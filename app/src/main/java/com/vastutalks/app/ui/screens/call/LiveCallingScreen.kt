@@ -208,35 +208,36 @@ fun LiveCallingScreen(
     )
 
     DarkScreenStatusBar()
-    Box(modifier = Modifier.fillMaxSize().background(VastuCharcoal), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxSize().background(com.vastutalks.app.ui.theme.ExpertCallGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val calleePhoto by androidx.compose.runtime.produceState("", calleeUid) {
+                value = com.vastutalks.app.data.repository.UserRepository().getExpert(calleeUid).getOrNull()?.photo.orEmpty()
+            }
             Box(
-                modifier = Modifier.size(120.dp).scale(scale).clip(CircleShape).background(VastuPrimary.copy(alpha = 0.25f)),
+                modifier = Modifier.size(106.dp).scale(scale).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier.size(96.dp).clip(CircleShape).background(VastuPrimary), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = calleeName.split(" ").mapNotNull { it.firstOrNull() }.take(2).joinToString(""),
-                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.sp
-                    )
-                }
+                com.vastutalks.app.ui.components.ProfileAvatar(calleePhoto, calleeName, size = 98.dp)
             }
-            Box(modifier = Modifier.height(28.dp))
-            Text(calleeName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Box(modifier = Modifier.height(6.dp))
+            Box(modifier = Modifier.height(21.dp))
+            Text(calleeName, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 21.sp)
+            Box(modifier = Modifier.height(7.dp))
             Text(
                 text = when {
                     permissionsDenied -> "Microphone/camera permission is needed to place this call."
                     errorText != null -> errorText ?: ""
                     else -> statusText
                 },
-                color = if (permissionsDenied || errorText != null) Color(0xFFFFB4A9) else Color.White.copy(alpha = 0.7f),
-                fontSize = 14.sp, textAlign = TextAlign.Center,
+                color = if (permissionsDenied || errorText != null) Color(0xFFFFB4A9) else Color.White.copy(alpha = 0.8f),
+                fontSize = 12.25.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
+            androidx.compose.foundation.layout.Row(Modifier.padding(top = 14.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(5.25.dp)) {
+                listOf(0.6f, 0.4f, 0.25f).forEach { a -> Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = a))) }
+            }
             Box(modifier = Modifier.height(64.dp))
             Box(
-                modifier = Modifier.size(64.dp).clip(CircleShape).background(Danger)
+                modifier = Modifier.size(68.dp).clip(CircleShape).background(com.vastutalks.app.ui.theme.EndCallRed)
                     .clickable {
                         val id = callId
                         if (id != null) {

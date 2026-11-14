@@ -100,20 +100,38 @@ private fun loadVideo(file: File, maxFrames: Int, maxSide: Int): CapturedVideo? 
     val retriever = MediaMetadataRetriever()
     try {
         retriever.setDataSource(file.absolutePath)
-        val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: return null
-        val count = (durationMs / 3_000L + 1).toInt().coerceIn(3, maxFrames)
-        val frames = (0 until count).mapNotNull { i ->
-            // Sample the middle of each slice, so we skip the shaky first and last moments.
-            val atUs = (durationMs * 1000L) * (2 * i + 1) / (2 * count)
-            retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST)?.let { scaleDown(it, maxSide) }
-        }
-        return if (frames.isEmpty()) null else CapturedVideo(file, frames, durationMs)
+        val (durationMs, frames) = framesOf(retriever, maxFrames, maxSide) ?: return null
+        return CapturedVideo(file, frames, durationMs)
     } finally {
         retriever.release()
     }
 }
 
-private fun scaleDown(bitmap: Bitmap, maxSide: Int): Bitmap {
+/** Frames from a video picked from the gallery, as for [loadVideo]; null if it can't be read. Call off the main thread. */
+internal fun loadVideoFrames(context: Context, uri: Uri, maxFrames: Int, maxSide: Int): List<Bitmap>? {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, uri)
+        framesOf(retriever, maxFrames, maxSide)?.second
+    } catch (e: RuntimeException) {
+        null
+    } finally {
+        retriever.release()
+    }
+}
+
+private fun framesOf(retriever: MediaMetadataRetriever, maxFrames: Int, maxSide: Int): Pair<Long, List<Bitmap>>? {
+    val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: return null
+    val count = (durationMs / 3_000L + 1).toInt().coerceIn(3, maxFrames)
+    val frames = (0 until count).mapNotNull { i ->
+        // Sample the middle of each slice, so we skip the shaky first and last moments.
+        val atUs = (durationMs * 1000L) * (2 * i + 1) / (2 * count)
+        retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST)?.let { scaleDown(it, maxSide) }
+    }
+    return if (frames.isEmpty()) null else durationMs to frames
+}
+
+internal fun scaleDown(bitmap: Bitmap, maxSide: Int): Bitmap {
     val scale = maxSide.toFloat() / maxOf(bitmap.width, bitmap.height)
     if (scale >= 1f) return bitmap
     return Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
