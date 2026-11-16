@@ -178,3 +178,97 @@ private fun toWav(frames: List<ShortArray>): ByteArray {
     out.write(pcm.array())
     return out.toByteArray()
 }
+
+private const val MAX_RECORD_FRAMES = 2000 // cap a voice note at ~60 s
+private const val MIN_RECORD_FRAMES = 15 // under ~0.45 s is a mis-tap, not a question
+
+/**
+ * A tap-to-record voice note for the chat: unlike [CallerListener] it
+ * doesn't stop when the user pauses — it records until [stop] (send) or
+ * [cancel], then hands the whole recording over as a 16 kHz mono WAV.
+ */
+class VoiceRecorder internal constructor() {
+    var isRecording by mutableStateOf(false)
+        internal set
+    /** Seconds recorded so far. */
+    var seconds by mutableStateOf(0)
+        internal set
+    /** Mic loudness, 0..1, for the wave bars. */
+    var level by mutableStateOf(0f)
+        internal set
+
+    internal var session by mutableStateOf(0)
+    @Volatile internal var finish: Boolean? = null // null = keep going, true = send, false = discard
+
+    fun start() {
+        if (isRecording) return
+        finish = null
+        isRecording = true
+        session++
+    }
+
+    fun stop() { finish = true }
+    fun cancel() { finish = false }
+}
+
+@Composable
+fun rememberVoiceRecorder(onRecorded: (ByteArray) -> Unit, onTooShort: () -> Unit = {}): VoiceRecorder {
+    val recorder = remember { VoiceRecorder() }
+    val currentOnRecorded by rememberUpdatedState(onRecorded)
+    val currentOnTooShort by rememberUpdatedState(onTooShort)
+
+    LaunchedEffect(recorder.session) {
+        if (recorder.session == 0) return@LaunchedEffect
+        try {
+            val result = withContext(Dispatchers.IO) { recordUntilStopped(recorder) }
+            when {
+                result == null -> Unit
+                result.isEmpty() -> currentOnTooShort()
+                else -> currentOnRecorded(result)
+            }
+        } finally {
+            recorder.isRecording = false
+            recorder.level = 0f
+            recorder.seconds = 0
+        }
+    }
+    return recorder
+}
+
+/** The WAV on send, an empty array if it was too short, or null if cancelled / the mic failed. */
+@SuppressLint("MissingPermission") // Only started once RECORD_AUDIO is granted.
+private suspend fun recordUntilStopped(state: VoiceRecorder): ByteArray? = withContext(Dispatchers.IO) {
+    val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+    val recorder = AudioRecord(
+        MediaRecorder.AudioSource.VOICE_RECOGNITION,
+        SAMPLE_RATE,
+        AudioFormat.CHANNEL_IN_MONO,
+        AudioFormat.ENCODING_PCM_16BIT,
+        max(minBuffer, FRAME_SAMPLES * 2 * 8)
+    )
+    if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+        recorder.release()
+        return@withContext null
+    }
+    val frame = ShortArray(FRAME_SAMPLES)
+    val frames = mutableListOf<ShortArray>()
+    try {
+        recorder.startRecording()
+        while (isActive && state.finish == null && frames.size < MAX_RECORD_FRAMES) {
+            val read = recorder.read(frame, 0, FRAME_SAMPLES)
+            if (read <= 0) continue
+            val chunk = frame.copyOf(read)
+            frames.add(chunk)
+            state.level = (rms(chunk) / 3000.0).coerceIn(0.0, 1.0).toFloat()
+            state.seconds = frames.size * FRAME_SAMPLES / SAMPLE_RATE
+        }
+        when {
+            state.finish == false || !isActive -> null
+            frames.size < MIN_RECORD_FRAMES -> ByteArray(0)
+            else -> toWav(frames)
+        }
+    } finally {
+        runCatching { recorder.stop() }
+        recorder.release()
+    }
+}

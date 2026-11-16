@@ -86,6 +86,8 @@ fun CreateAccountScreen(
     onAccountCreated: () -> Unit,
     onOpenTerms: () -> Unit,
     onOpenPrivacyPolicy: () -> Unit,
+    /** Opened from the Partner app's "Apply": start on the Vastu Expert role. */
+    startAsExpert: Boolean = false,
     authViewModel: AuthViewModel = viewModel()
 ) {
     var fullName by remember { mutableStateOf("") }
@@ -96,7 +98,7 @@ fun CreateAccountScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var agreedToTerms by remember { mutableStateOf(false) }
-    var selectedRole by remember { mutableStateOf(UserRole.NORMAL_USER) }
+    var selectedRole by remember { mutableStateOf(if (startAsExpert) UserRole.VASTU_EXPERT else UserRole.NORMAL_USER) }
     var photo by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     // Expert-only: the details shown on their card and profile.
     var specialty by remember { mutableStateOf("") }

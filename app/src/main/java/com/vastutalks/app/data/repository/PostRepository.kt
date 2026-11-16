@@ -58,7 +58,7 @@ class PostRepository(
     }
 
     /** Publishes a post as the signed-in expert ([author] is their directory entry). */
-    suspend fun create(author: ExpertProfile, text: String, image: Bitmap?): Result<Unit> {
+    suspend fun create(author: ExpertProfile, text: String, image: Bitmap?, title: String = "", category: String = ""): Result<Unit> {
         val uid = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("No signed-in user"))
         return try {
             val encoded = image?.let { withContext(Dispatchers.Default) { ProfilePhotos.encodePostImage(it) } }.orEmpty()
@@ -70,6 +70,8 @@ class PostRepository(
                     authorName = author.name,
                     authorPhoto = author.photo,
                     authorSpecialty = author.displaySpecialty,
+                    title = title.trim(),
+                    category = category,
                     text = text.trim(),
                     image = encoded,
                     createdAtMillis = System.currentTimeMillis()

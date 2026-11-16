@@ -44,7 +44,9 @@ data class HomeUiState(
     /** Unread notifications, for the badge on the bell. */
     val unreadNotifications: Int = 0,
     /** Unread chat messages across all chats, for the badge on the messages icon. */
-    val unreadMessages: Long = 0L
+    val unreadMessages: Long = 0L,
+    /** Experts: their finished calls, newest first (Sessions and today's numbers). */
+    val callHistory: List<com.vastutalks.app.data.model.CallHistoryEntry> = emptyList()
 )
 
 private const val CLOCK_TICK_MILLIS = 30_000L
@@ -117,6 +119,11 @@ class HomeViewModel(
                         while (true) {
                             userRepository.heartbeat()
                             delay(ExpertProfile.HEARTBEAT_MILLIS)
+                        }
+                    }
+                    launch {
+                        com.vastutalks.app.data.repository.CallHistoryRepository().fetchHistory().onSuccess {
+                            _uiState.value = _uiState.value.copy(callHistory = it)
                         }
                     }
                     launch {

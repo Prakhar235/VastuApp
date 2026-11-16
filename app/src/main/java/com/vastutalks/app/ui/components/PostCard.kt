@@ -125,6 +125,16 @@ fun PostCard(
             }
         }
 
+        if (post.title.isNotBlank()) {
+            Text(
+                post.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = com.vastutalks.app.ui.theme.TextPrimary,
+                lineHeight = 19.sp,
+                modifier = Modifier.fillMaxWidth().then(openOnTap)
+            )
+        }
         if (post.text.isNotBlank()) {
             Text(
                 post.text,

@@ -128,7 +128,25 @@ fun VastuNavGraph(
                         popUpTo(Routes.SIGN_IN) { inclusive = true }
                     }
                 },
-                onNavigateToCreateAccount = { navController.navigate(Routes.CREATE_ACCOUNT) },
+                onNavigateToCreateAccount = { navController.navigate(Routes.createAccount()) },
+                onForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) },
+                onExpertSignIn = { navController.navigate(Routes.EXPERT_SIGN_IN) }
+            )
+        }
+
+        composable(Routes.EXPERT_SIGN_IN) {
+            com.vastutalks.app.ui.screens.auth.ExpertSignInScreen(
+                onSignedIn = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onUserSignIn = {
+                    if (!navController.popBackStack(Routes.SIGN_IN, inclusive = false)) {
+                        navController.navigate(Routes.SIGN_IN) { popUpTo(Routes.EXPERT_SIGN_IN) { inclusive = true } }
+                    }
+                },
+                onApply = { navController.navigate(Routes.createAccount(expert = true)) },
                 onForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) }
             )
         }
@@ -137,8 +155,12 @@ fun VastuNavGraph(
             com.vastutalks.app.ui.screens.auth.ForgotPasswordScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Routes.CREATE_ACCOUNT) {
+        composable(
+            route = Routes.CREATE_ACCOUNT,
+            arguments = listOf(navArgument("expert") { type = NavType.BoolType; defaultValue = false })
+        ) { backStackEntry ->
             CreateAccountScreen(
+                startAsExpert = backStackEntry.arguments?.getBoolean("expert") ?: false,
                 onBack = { navController.popBackStack() },
                 onAccountCreated = {
                     // Firebase's createUserWithEmailAndPassword already confirms
@@ -175,7 +197,8 @@ fun VastuNavGraph(
                 onCreatePost = { navController.navigate(Routes.CREATE_POST) },
                 onOpenPost = { navController.navigate(Routes.postDetail(it)) },
                 onChatExpert = { uid, name -> navController.navigate(Routes.conversation(uid, name)) },
-                onOpenChats = { navController.navigate(Routes.CHATS) }
+                onOpenChats = { navController.navigate(Routes.CHATS) },
+                onSignOut = ::signOut
             )
         }
 
@@ -225,8 +248,6 @@ fun VastuNavGraph(
         composable(Routes.AGENT_CHAT) {
             AgentChatScreen(
                 onBack = { navController.popBackStack() },
-                // "Talk" opens the voice screen straight away, as in the design.
-                onCall = { navController.navigate(Routes.agentInCall(video = false)) },
                 onScanRoom = { navController.navigate(Routes.ROOM_SCAN) },
                 onOpenReport = { navController.navigate(Routes.roomReport(it)) }
             )

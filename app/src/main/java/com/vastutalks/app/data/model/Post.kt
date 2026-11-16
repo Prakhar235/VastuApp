@@ -13,6 +13,10 @@ data class Post(
     /** Base64 JPEG, as on the expert's profile (see ProfilePhotos); blank if none. */
     val authorPhoto: String = "",
     val authorSpecialty: String = "",
+    /** Article headline (blank on older posts, which are just text). */
+    val title: String = "",
+    /** One of the article categories (Home, Office, Kitchen…); blank on older posts. */
+    val category: String = "",
     val text: String = "",
     /** Optional picture, base64 JPEG (see ProfilePhotos.encodePostImage); blank if none. */
     val image: String = "",

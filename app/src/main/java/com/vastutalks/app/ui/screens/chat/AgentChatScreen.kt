@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Schedule
@@ -239,12 +241,16 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
         ask { agent.reply(text) }
     }
 
-    /** Turns a spoken question (16 kHz WAV from the mic) into text, then sends it like a typed one. */
+    /** True while a recorded voice note is being turned into text. */
+    var transcribing by mutableStateOf(false)
+        private set
+
+    /** Turns a recorded voice note (16 kHz WAV) into text, then sends the transcript like a typed message. */
     fun sendVoice(wav: ByteArray, onFail: (String) -> Unit) {
         if (!isLoaded) return
-        pendingTurns++
+        transcribing = true
         viewModelScope.launch {
-            val text = try { agent.transcribe(wav) } finally { pendingTurns-- }
+            val text = try { agent.transcribe(wav) } finally { transcribing = false }
             if (text.isNullOrBlank()) onFail(tr("Couldn't catch that — try again.", "सुनाई नहीं दिया — फिर से बोलें।"))
             else { input = text; sendTyped() }
         }
@@ -280,8 +286,6 @@ class AgentChatViewModel(application: Application) : AndroidViewModel(applicatio
 @Composable
 fun AgentChatScreen(
     onBack: () -> Unit,
-    /** Starts as audio; the camera can be turned on during the call. */
-    onCall: () -> Unit = {},
     onScanRoom: () -> Unit = {},
     /** Opens the full room report saved with that chat message. */
     onOpenReport: (messageId: Int) -> Unit = {},
@@ -297,17 +301,15 @@ fun AgentChatScreen(
     val recordVideo = rememberVideoCapture(onError = toast, onCaptured = { videoToReview = it })
 
     var attachOpen by remember { mutableStateOf(false) }
-    var micOn by remember { mutableStateOf(false) }
+    val recorder = com.vastutalks.app.ui.components.rememberVoiceRecorder(
+        onRecorded = { wav -> viewModel.sendVoice(wav, toast) },
+        onTooShort = { toast(tr("Hold on — that was too short. Tap record and speak.", "बहुत छोटा था — रिकॉर्ड दबाकर बोलें।")) }
+    )
     val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) micOn = true else toast(tr("Allow the microphone to speak your question.", "सवाल बोलने के लिए माइक की अनुमति दें।")) }
-    val listener = com.vastutalks.app.ui.components.rememberCallerListener(active = micOn) { wav ->
-        micOn = false
-        viewModel.sendVoice(wav, toast)
-    }
-    val toggleMic = {
-        if (micOn) micOn = false
-        else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) micOn = true
+    ) { granted -> if (granted) recorder.start() else toast(tr("Allow the microphone to record your question.", "सवाल रिकॉर्ड करने के लिए माइक की अनुमति दें।")) }
+    val startRecording = {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) recorder.start()
         else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
     }
 
@@ -321,16 +323,16 @@ fun AgentChatScreen(
                     .background(Color.White.copy(alpha = 0.8f))
                     .statusBarsPadding()
             ) {
-                ChatHeader(onBack = onBack, onCall = onCall)
+                ChatHeader(onBack = onBack)
             }
             FreeMinutesBar()
             DesignAgentChat(
                 viewModel = viewModel,
                 isTyping = viewModel.pendingTurns > 0,
-                listening = micOn,
-                hearingSpeech = listener.isHearingSpeech,
+                recorder = recorder,
+                transcribing = viewModel.transcribing,
                 onAttach = { attachOpen = true },
-                onToggleMic = toggleMic,
+                onRecord = startRecording,
                 onOpenReport = onOpenReport,
                 modifier = Modifier.weight(1f)
             )
@@ -391,9 +393,9 @@ internal fun AnayraAvatar(size: androidx.compose.ui.unit.Dp, radius: androidx.co
     }
 }
 
-/** Back, Anayra · Online, then Talk and the EN | हिं toggle. */
+/** Back, Anayra · Online, then the EN | हिं toggle. (Voice is a recorded note in the composer, not a live call.) */
 @Composable
-private fun ChatHeader(onBack: () -> Unit, onCall: () -> Unit) {
+private fun ChatHeader(onBack: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 17.5.dp, vertical = 10.5.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -419,21 +421,6 @@ private fun ChatHeader(onBack: () -> Unit, onCall: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(5.25.dp).clip(CircleShape).background(Color(0xFF51CF66)))
                 Text(tr(" Online", " ऑनलाइन"), fontSize = 10.5.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-            }
-        }
-        if (AnanyaAgent.CALL_ENABLED) {
-            Row(
-                Modifier
-                    .height(34.dp)
-                    .shadow(6.dp, RoundedCornerShape(999.dp), spotColor = VastuPrimary)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF8B5CF6), VastuPrimary)))
-                    .clickable(onClickLabel = tr("Talk to ${AnanyaAgent.NAME}", "${AnanyaAgent.NAME_HI} से बात करें"), onClick = onCall)
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
-                Text(tr(" Talk", " बात करें"), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
         com.vastutalks.app.ui.components.DesignLangToggle(Modifier.padding(start = 8.dp))
@@ -518,10 +505,10 @@ private fun BarChip(background: Color, content: @Composable androidx.compose.fou
 private fun DesignAgentChat(
     viewModel: AgentChatViewModel,
     isTyping: Boolean,
-    listening: Boolean,
-    hearingSpeech: Boolean,
+    recorder: com.vastutalks.app.ui.components.VoiceRecorder,
+    transcribing: Boolean,
     onAttach: () -> Unit,
-    onToggleMic: () -> Unit,
+    onRecord: () -> Unit,
     onOpenReport: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -585,27 +572,26 @@ private fun DesignAgentChat(
                     }
                 }
             }
-            if (listening) {
+            if (transcribing) {
                 Row(
                     Modifier
                         .padding(start = 17.5.dp, end = 17.5.dp, bottom = 10.dp)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFFFEF2F2))
-                        .border(1.dp, Color(0xFFFEE2E2), RoundedCornerShape(14.dp))
-                        .clickable(onClick = onToggleMic)
+                        .background(Color(0xFFFAF5FF))
+                        .border(1.dp, Color(0xFFE9D5FF), RoundedCornerShape(14.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    WaveBars(active = hearingSpeech)
+                    androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), color = VastuPrimary, strokeWidth = 2.dp)
                     Text(
-                        tr("Listening… speak in English", "सुन रही हूँ… हिंदी में बोलें"),
-                        fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFB91C1C),
-                        modifier = Modifier.weight(1f).padding(start = 12.dp)
+                        tr("Turning your recording into text…", "आपकी रिकॉर्डिंग को टेक्स्ट में बदल रही हूँ…"),
+                        fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = VastuPrimary,
+                        modifier = Modifier.padding(start = 10.dp)
                     )
-                    Text(tr("Tap mic to stop", "रोकने के लिए टैप करें"), fontSize = 10.5.sp, color = Color(0xFFEF4444))
                 }
             }
+            if (recorder.isRecording) RecordingBanner(recorder)
             Row(Modifier.padding(horizontal = 17.5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
@@ -626,13 +612,23 @@ private fun DesignAgentChat(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                ComposerButton(Icons.Outlined.PhotoCamera, tr("Camera or upload", "कैमरा या अपलोड"), Color(0xFFF1EFF8), VastuPrimary, onAttach)
-                ComposerButton(Icons.Outlined.Mic, tr("Speak", "बोलें"), if (listening) Color(0xFFEF4444) else Color(0xFFF1EFF8), if (listening) Color.White else VastuPrimary, onToggleMic)
-                val canSend = viewModel.input.isNotBlank()
+                ComposerButton(Icons.Outlined.PhotoCamera, tr("Camera or upload", "कैमरा या अपलोड"), Color(0xFFF1EFF8), VastuPrimary, onClick = onAttach)
+                // Record: tap to start, tap again to stop and send what was said as text.
+                val recording = recorder.isRecording
+                ComposerButton(
+                    if (recording) Icons.Filled.Stop else Icons.Outlined.Mic,
+                    if (recording) tr("Stop and send recording", "रिकॉर्डिंग रोकें और भेजें") else tr("Record", "रिकॉर्ड करें"),
+                    if (recording) Color(0xFFEF4444) else Color(0xFFF1EFF8),
+                    if (recording) Color.White else VastuPrimary,
+                    enabled = !transcribing,
+                    onClick = { if (recording) recorder.stop() else onRecord() }
+                )
+                val canSend = viewModel.input.isNotBlank() && !recording
                 Box(
                     Modifier
                         .padding(start = 7.dp)
                         .size(39.dp)
+                        .shadow(8.dp, RoundedCornerShape(14.dp), spotColor = Color(0x4DA855F7))
                         .clip(RoundedCornerShape(14.dp))
                         .background(Brush.horizontalGradient(listOf(VastuPrimary, Color(0xFF4F46E5))))
                         .alpha(if (canSend) 1f else 0.5f)
@@ -646,33 +642,71 @@ private fun DesignAgentChat(
     }
 }
 
+/**
+ * The design's red listening strip, shown while a voice note records:
+ * live wave bars, the time, discard, and "Tap mic to send".
+ */
 @Composable
-private fun ComposerButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, bg: Color, tint: Color, onClick: () -> Unit) {
+private fun RecordingBanner(recorder: com.vastutalks.app.ui.components.VoiceRecorder) {
+    Row(
+        Modifier
+            .padding(start = 17.5.dp, end = 17.5.dp, bottom = 10.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFFFEF2F2))
+            .border(1.dp, Color(0xFFFEE2E2), RoundedCornerShape(14.dp))
+            .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        WaveBars(level = recorder.level)
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(
+                tr("Recording… ", "रिकॉर्ड हो रहा है… ") + "%d:%02d".format(recorder.seconds / 60, recorder.seconds % 60),
+                fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFB91C1C)
+            )
+            Text(tr("Tap mic to send", "भेजने के लिए माइक दबाएँ"), fontSize = 10.5.sp, color = Color(0xFFEF4444))
+        }
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable(onClickLabel = tr("Discard recording", "रिकॉर्डिंग हटाएं"), onClick = recorder::cancel),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Close, tr("Discard recording", "रिकॉर्डिंग हटाएं"), tint = Color(0xFFB91C1C), modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun ComposerButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, bg: Color, tint: Color, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier
             .padding(start = 7.dp)
             .size(39.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(bg)
-            .clickable(onClickLabel = label, onClick = onClick),
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(18.dp))
     }
 }
 
-/** Twelve red bars that bounce while the mic hears speech. */
+/** Red bars that bounce with the mic level while recording. */
 @Composable
-private fun WaveBars(active: Boolean) {
+private fun WaveBars(level: Float) {
     val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "wave")
     val phase by t.animateFloat(
         0f, 6.2832f,
         androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.LinearEasing)),
         label = "phase"
     )
+    val loud = (level * 4f).coerceIn(0f, 1f)
     Row(Modifier.height(20.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(12) { i ->
-            val k: Float = if (active) 0.3f + 0.7f * ((kotlin.math.sin(phase + i * 0.6f) + 1f) / 2f) else 0.3f
+        repeat(14) { i ->
+            val k: Float = 0.2f + 0.8f * loud * ((kotlin.math.sin(phase + i * 0.6f) + 1f) / 2f)
             Box(Modifier.width(3.dp).height(20.dp * k).clip(RoundedCornerShape(2.dp)).background(Color(0xFFEF4444)))
         }
     }
@@ -692,7 +726,15 @@ private fun DesignBubble(m: AgentChatMessage) {
                 .then(if (mine) Modifier.background(Brush.linearGradient(listOf(VastuPrimary, Color(0xFF4F46E5)))) else Modifier.background(Color.White))
                 .padding(horizontal = 14.dp, vertical = 10.5.dp)
         ) {
-            com.vastutalks.app.ui.components.MessageBody(m, textSize = 12.25.sp)
+            Column {
+                com.vastutalks.app.ui.components.MessageBody(m, textSize = 12.25.sp)
+                if (m.time > 0) Text(
+                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(m.time)),
+                    fontSize = 10.5.sp,
+                    color = if (mine) Color.White.copy(alpha = 0.7f) else TextSecondary,
+                    modifier = Modifier.padding(top = 5.25.dp)
+                )
+            }
         }
     }
 }
@@ -798,7 +840,15 @@ private fun AttachSheet(onDismiss: () -> Unit, onPhoto: () -> Unit, onVideo: () 
         contentPadding = 20.dp,
         showHandle = true
     ) {
-        Text(tr("Add photo or video", "फ़ोटो या वीडियो जोड़ें"), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(bottom = 12.dp))
+        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Add photo or video", "फ़ोटो या वीडियो जोड़ें"), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.weight(1f))
+            Box(
+                Modifier.size(34.dp).clip(CircleShape).background(Color(0xFFF1F1F6)).clickable(onClickLabel = tr("Close", "बंद करें"), onClick = onDismiss),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Close, tr("Close", "बंद करें"), tint = Color(0xFF4A5568), modifier = Modifier.size(18.dp))
+            }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AttachOption(Icons.Outlined.PhotoCamera, Color(0xFFF3F0FF), VastuPrimary, tr("Take photo", "फ़ोटो लें"), tr("Open camera and capture a room", "कैमरा खोलें और कमरे की फ़ोटो लें"), onPhoto)
             AttachOption(Icons.Outlined.Videocam, Color(0xFFFEF2F2), Color(0xFFEF4444), tr("Record video", "वीडियो रिकॉर्ड करें"), tr("Walk slowly around the room", "कमरे में धीरे-धीरे घूमें"), onVideo)

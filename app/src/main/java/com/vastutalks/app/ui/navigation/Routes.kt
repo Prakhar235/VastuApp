@@ -4,7 +4,10 @@ object Routes {
     const val SPLASH = "splash"
     const val ONBOARDING = "onboarding"
     const val SIGN_IN = "sign_in"
-    const val CREATE_ACCOUNT = "create_account"
+    const val CREATE_ACCOUNT = "create_account?expert={expert}"
+    fun createAccount(expert: Boolean = false) = "create_account?expert=$expert"
+    /** The Partner app's sign-in for Vastu experts. */
+    const val EXPERT_SIGN_IN = "expert_sign_in"
     const val FORGOT_PASSWORD = "forgot_password"
     const val HOME = "home"
     const val PROFILE = "profile"

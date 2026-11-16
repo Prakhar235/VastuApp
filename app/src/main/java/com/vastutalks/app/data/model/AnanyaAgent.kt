@@ -20,5 +20,5 @@ object AnanyaAgent {
      * Shows the audio/video call buttons for her on Home and in the chat.
      * Turn off to offer only the chat.
      */
-    const val CALL_ENABLED = true
+    const val CALL_ENABLED = false
 }

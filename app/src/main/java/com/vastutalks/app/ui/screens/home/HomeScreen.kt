@@ -145,6 +145,7 @@ fun HomeScreen(
     onOpenPost: (postId: String) -> Unit = {},
     onChatExpert: (expertId: String, expertName: String) -> Unit = { _, _ -> },
     onOpenChats: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     homeViewModel: HomeViewModel = viewModel()
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
@@ -166,6 +167,33 @@ fun HomeScreen(
     }
 
     var showNotifications by remember { mutableStateOf(false) }
+    if (uiState.role == UserRole.VASTU_EXPERT) {
+        // Experts get the Partner app (design: "Expert App").
+        com.vastutalks.app.ui.screens.expert.ExpertAppScreen(
+            me = uiState.myExpertProfile,
+            posts = uiState.posts,
+            history = uiState.callHistory,
+            incomingCall = uiState.incomingCall,
+            unreadNotifications = uiState.unreadNotifications,
+            unreadMessages = uiState.unreadMessages,
+            pendingPhoto = uiState.pendingPhoto,
+            photoError = uiState.photoError,
+            onPhotoPicked = homeViewModel::updatePhoto,
+            onSaveDetails = homeViewModel::updateDetails,
+            onOnlineChange = homeViewModel::setOnline,
+            onOpenNotifications = { showNotifications = true },
+            onOpenChats = onOpenChats,
+            onWriteArticle = onCreatePost,
+            onOpenPost = onOpenPost,
+            onAccepted = { channelName, callType, peerName -> onAcceptIncomingCall(channelName, callType, peerName) },
+            onDecline = { homeViewModel.declineIncomingCall() },
+            onSignOut = onSignOut
+        )
+        if (showNotifications) {
+            com.vastutalks.app.ui.screens.post.NotificationsSheet(onDismiss = { showNotifications = false }, onOpenPost = onOpenPost)
+        }
+        return
+    }
     Box(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
@@ -230,24 +258,7 @@ fun HomeScreen(
             null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = VastuPrimary)
             }
-            UserRole.VASTU_EXPERT -> ExpertDashboard(
-                incomingCall = uiState.incomingCall,
-                me = uiState.myExpertProfile,
-                pendingPhoto = uiState.pendingPhoto,
-                photoError = uiState.photoError,
-                onPhotoPicked = homeViewModel::updatePhoto,
-                onSaveDetails = homeViewModel::updateDetails,
-                myPosts = uiState.posts,
-                likedPostIds = uiState.likedPostIds,
-                onLike = homeViewModel::toggleLike,
-                onOpenPost = onOpenPost,
-                onCreatePost = onCreatePost,
-                onDeletePost = homeViewModel::deletePost,
-                isOnline = uiState.myExpertProfile?.isOnline ?: true,
-                onOnlineChange = homeViewModel::setOnline,
-                onAccepted = { channelName, callType, peerName -> onAcceptIncomingCall(channelName, callType, peerName) },
-                onDecline = { homeViewModel.declineIncomingCall() }
-            )
+            UserRole.VASTU_EXPERT -> {}
             UserRole.NORMAL_USER -> NormalUserHome(
                 liveExperts = uiState.experts.sortedForDirectory(uiState.nowMillis),
                 now = uiState.nowMillis,
@@ -267,266 +278,6 @@ fun HomeScreen(
     if (showNotifications) {
         com.vastutalks.app.ui.screens.post.NotificationsSheet(onDismiss = { showNotifications = false }, onOpenPost = onOpenPost)
     }
-    }
-}
-
-@Composable
-private fun ExpertDashboard(
-    incomingCall: CallRequest?,
-    me: ExpertProfile?,
-    pendingPhoto: android.graphics.Bitmap?,
-    photoError: String?,
-    onPhotoPicked: (android.graphics.Bitmap) -> Unit,
-    onSaveDetails: (city: String, experienceYears: Int, bio: String, onDone: (String?) -> Unit) -> Unit,
-    myPosts: List<Post>,
-    likedPostIds: Set<String>,
-    onLike: (String) -> Unit,
-    onOpenPost: (String) -> Unit,
-    onCreatePost: () -> Unit,
-    onDeletePost: (String) -> Unit,
-    isOnline: Boolean,
-    onOnlineChange: (Boolean) -> Unit,
-    onAccepted: (channelName: String, callType: CallType, peerName: String) -> Unit,
-    onDecline: () -> Unit
-) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val signalingRepository = remember { CallSignalingRepository() }
-    val tokenRepository = remember { TokenRepository() }
-
-    var isAccepting by remember { mutableStateOf(false) }
-    var acceptError by remember { mutableStateOf<String?>(null) }
-    var acceptedCall by remember { mutableStateOf<CallRequest?>(null) }
-
-    // While this screen is in front it shows and rings for incoming calls itself,
-    // so the push notification doesn't ring as well (see IncomingCallAlerts).
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> IncomingCallAlerts.inAppRingerVisible = true
-                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> IncomingCallAlerts.inAppRingerVisible = false
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            IncomingCallAlerts.inAppRingerVisible = false
-            IncomingCallAlerts.stopRinging(context)
-        }
-    }
-    // One ringer: the card rings while it's waiting for an answer, and takes over
-    // from the push notification if that arrived first.
-    val ringingCallId = incomingCall?.callId?.takeIf { !isAccepting }
-    LaunchedEffect(ringingCallId) {
-        if (ringingCallId != null) {
-            IncomingCallAlerts.cancelNotification(context, ringingCallId)
-            IncomingCallAlerts.startRinging(context)
-        } else {
-            IncomingCallAlerts.stopRinging(context)
-        }
-    }
-
-    val connectionState by AgoraCallManager.connectionState.collectAsState()
-    LaunchedEffect(connectionState) {
-        val call = acceptedCall
-        if (connectionState == CallConnectionState.JOINED && call != null) {
-            val callType = runCatching { CallType.valueOf(call.callType) }.getOrDefault(CallType.AUDIO)
-            onAccepted(call.channelName, callType, call.callerName)
-            acceptedCall = null
-            isAccepting = false
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-        // The expert as users see them; tap the photo to change it.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ProfilePhotoEditor(
-                photo = me?.photo.orEmpty(),
-                name = me?.name.orEmpty(),
-                size = 64.dp,
-                picked = pendingPhoto,
-                onPicked = onPhotoPicked
-            )
-            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(me?.name.orEmpty(), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(me?.displaySpecialty ?: "", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VastuPrimary)
-                Text(
-                    when {
-                        pendingPhoto != null -> "Saving your photo…"
-                        photoError != null -> photoError
-                        me?.photo.isNullOrBlank() -> "Tap the photo to add one — users see it when choosing an expert"
-                        else -> "Tap the photo to change it"
-                    },
-                    fontSize = 12.sp,
-                    color = if (photoError != null) Danger else TextSecondary,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-        }
-        if (me != null) {
-            Box(modifier = Modifier.height(8.dp))
-            ExpertDetailsCard(me, onSave = onSaveDetails)
-        }
-        Box(modifier = Modifier.height(12.dp))
-
-        // Availability switch: shows users whether the expert is around. Offline
-        // experts can still be called — their phone rings through a push.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White)
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(if (isOnline) OnlineGreen else TextSecondary))
-            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(
-                    if (isOnline) "You're online" else "You're offline",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2B2B2B)
-                )
-                Text(
-                    if (isOnline) "Users can call you for audio and video consultations" else "Users can still call you — your phone will ring",
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
-            }
-            Switch(
-                checked = isOnline,
-                onCheckedChange = onOnlineChange,
-                colors = SwitchDefaults.colors(checkedTrackColor = OnlineGreen)
-            )
-        }
-        Box(modifier = Modifier.height(16.dp))
-
-        if (incomingCall != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White)
-                    .padding(20.dp)
-            ) {
-                Column {
-                    Text(
-                        if (incomingCall.callType == CallType.VIDEO.name) "Incoming video call" else "Incoming audio call",
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                    Text(incomingCall.callerName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B))
-                    if (acceptError != null) {
-                        Box(modifier = Modifier.height(8.dp))
-                        Text(acceptError ?: "", fontSize = 12.sp, color = Danger)
-                    }
-                    Box(modifier = Modifier.height(16.dp))
-                    if (isAccepting) {
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = VastuPrimary, modifier = Modifier.size(28.dp))
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(Danger)
-                                    .clickable {
-                                        coroutineScope.launch { signalingRepository.updateStatus(incomingCall.callId, CallRequestStatus.DECLINED) }
-                                        onDecline()
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("Decline", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(Success)
-                                    .clickable {
-                                        isAccepting = true
-                                        acceptError = null
-                                        coroutineScope.launch {
-                                            val statusResult = signalingRepository.updateStatus(incomingCall.callId, CallRequestStatus.ACCEPTED)
-                                            if (statusResult.isFailure) {
-                                                acceptError = statusResult.exceptionOrNull()?.message ?: "Couldn't accept the call."
-                                                isAccepting = false
-                                                return@launch
-                                            }
-                                            val tokenResult = tokenRepository.fetchOrCreateExpertToken(incomingCall.calleeUid, incomingCall.channelName)
-                                            tokenResult.fold(
-                                                onSuccess = { token ->
-                                                    acceptedCall = incomingCall
-                                                    val isVideo = runCatching { CallType.valueOf(incomingCall.callType) }.getOrDefault(CallType.AUDIO) == CallType.VIDEO
-                                                    AgoraCallManager.joinChannelWithToken(context, incomingCall.channelName, token, isVideo)
-                                                },
-                                                onFailure = { e ->
-                                                    acceptError = e.message ?: "Couldn't fetch a call token. Is the Cloud Function deployed?"
-                                                    isAccepting = false
-                                                }
-                                            )
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("Accept", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-            Box(modifier = Modifier.height(20.dp))
-        }
-
-        // The expert's posts, shown in every user's Posts tab.
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Your posts", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B2B), modifier = Modifier.weight(1f))
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(VastuPrimary)
-                    .clickable { onCreatePost() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                Text(" New post", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
-        }
-        Box(modifier = Modifier.height(12.dp))
-        if (myPosts.isEmpty()) {
-            Text(
-                "Share Vastu tips and updates — your posts appear in every user's Posts tab.",
-                fontSize = 13.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-        } else {
-            myPosts.forEach { post ->
-                PostCard(
-                    post,
-                    liked = post.id in likedPostIds,
-                    onLikeClick = { onLike(post.id) },
-                    onOpen = { onOpenPost(post.id) },
-                    onDelete = { onDeletePost(post.id) },
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-            }
-        }
-        Box(modifier = Modifier.height(20.dp))
     }
 }
 
@@ -899,56 +650,8 @@ private fun ExpertRow(
 private fun directoryDotColor(expert: ExpertProfile, now: Long): Color =
     if (expert.isPresentAt(now)) OnlineGreen else TextHint
 
-/**
- * What users see on the expert's card and profile — city, experience and
- * About — with an Edit button that opens [EditExpertDetailsDialog].
- */
 @Composable
-private fun ExpertDetailsCard(
-    me: ExpertProfile,
-    onSave: (city: String, experienceYears: Int, bio: String, onDone: (String?) -> Unit) -> Unit
-) {
-    var editing by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                InfoPill(icon = Icons.Filled.WorkspacePremium, text = if (me.experienceYears > 0) "${me.experienceYears} yrs" else "Experience not set")
-                InfoPill(icon = Icons.Filled.LocationOn, text = me.city.ifBlank { "City not set" }, tint = Danger)
-            }
-            Text(
-                "Edit",
-                color = VastuPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { editing = true }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            )
-        }
-        Text(
-            me.bio.ifBlank { "Add a short introduction so users know how you can help." },
-            fontSize = 13.sp,
-            color = TextSecondary,
-            lineHeight = 19.sp,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 10.dp)
-        )
-    }
-    if (editing) {
-        EditExpertDetailsDialog(me, onDismiss = { editing = false }, onSave = onSave)
-    }
-}
-
-@Composable
-private fun EditExpertDetailsDialog(
+internal fun EditExpertDetailsDialog(
     me: ExpertProfile,
     onDismiss: () -> Unit,
     onSave: (city: String, experienceYears: Int, bio: String, onDone: (String?) -> Unit) -> Unit

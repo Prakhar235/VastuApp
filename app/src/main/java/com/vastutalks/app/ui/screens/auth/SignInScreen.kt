@@ -27,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import com.vastutalks.app.ui.components.OutlineButton
 import com.vastutalks.app.ui.components.OrDivider
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,6 +78,7 @@ fun SignInScreen(
     onSignInSuccess: () -> Unit,
     onNavigateToCreateAccount: () -> Unit,
     onForgotPassword: () -> Unit = {},
+    onExpertSignIn: () -> Unit = {},
     authViewModel: AuthViewModel = viewModel()
 ) {
     var phone by remember { mutableStateOf("") }
@@ -216,8 +219,37 @@ fun SignInScreen(
                     modifier = Modifier.clickable { onNavigateToCreateAccount() }
                 )
             }
+            ExpertEntryCard(onExpertSignIn)
             SecureNote(Modifier.padding(bottom = 20.dp))
         }
+    }
+}
+
+/** The design's dark "I’m a Vastu expert · Sign in to the Partner app" card. */
+@Composable
+private fun ExpertEntryCard(onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .shadow(12.dp, RoundedCornerShape(16.dp), ambientColor = Color(0xCC14103A), spotColor = Color(0xCC14103A))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF14103A), Color(0xFF2A1D63))))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(com.vastutalks.app.ui.screens.auth.PartnerGold),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Outlined.WorkspacePremium, null, tint = TextPrimary, modifier = Modifier.size(18.dp)) }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text("I’m a Vastu expert", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("Sign in to the Partner app", color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = VastuSun, modifier = Modifier.size(18.dp))
     }
 }
 

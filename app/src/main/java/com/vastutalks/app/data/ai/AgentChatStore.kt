@@ -53,7 +53,8 @@ class AgentChatStore(context: Context) {
                 sender = if (m.optString("sender") == ChatSender.USER.name) ChatSender.USER else ChatSender.AGENT,
                 image = m.optString("image").takeIf { it.isNotBlank() }
                     ?.let { BitmapFactory.decodeFile(File(dir, it).path)?.asImageBitmap() },
-                hasReport = m.optBoolean("report")
+                hasReport = m.optBoolean("report"),
+                time = m.optLong("time", 0L)
             )
         }
         val markable = (0 until json.optInt("markableCount")).mapNotNull { i ->
@@ -86,6 +87,7 @@ class AgentChatStore(context: Context) {
                             .put("sender", m.sender.name)
                             .put("image", imageName ?: "")
                             .put("report", m.hasReport)
+                            .put("time", m.time)
                     )
                 }
                 val json = JSONObject().put("messages", list).put("history", history).put("markableCount", markableCount)

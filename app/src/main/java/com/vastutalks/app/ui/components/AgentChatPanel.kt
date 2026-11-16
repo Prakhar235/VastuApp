@@ -76,7 +76,9 @@ data class AgentChatMessage(
     val sender: ChatSender = ChatSender.AGENT,
     val image: ImageBitmap? = null,
     /** Set on a room scan's report; the full report is saved with the chat (AgentChatStore.loadReport). */
-    val hasReport: Boolean = false
+    val hasReport: Boolean = false,
+    /** When it was sent (epoch ms); 0 for messages saved before times were kept. */
+    val time: Long = System.currentTimeMillis()
 )
 
 /**
